@@ -1,12 +1,21 @@
 #!/usr/bin/env bash
 
-set -euo pipefail
+# I might convert this into a general personal functions file
+# at some point, or otherwise generalize the scaffolding
 
 if [[ -n "$SCRIPTS_NETWORK_INFO" ]]; then
-    return 0
+  return 0
 fi
-
 readonly SCRIPTS_NETWORK_INFO=yes
+
+. lib.sh
+
+set -euo pipefail
+
+readonly COMMANDS=(
+	"public_ip"
+	"private_ip"
+)
 
 public_ip() {
 	curl -s https://ipinfo.io/ip
@@ -16,6 +25,23 @@ private_ip() {
 	ip route get 1 | head -1 | cut -d' ' -f7
 }
 
-if [[ -n $1 ]]; then
-	printf "%s\n" "$("$@")"
+_help_msg() {
+	# not properly formatted but no matter
+	cat <<- EOF
+	Commands available:
+EOF
+	printf "%s\n" "${COMMANDS[@]}"
+}
+
+# if this got complex I'd use argbash
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+	if [[ -z "${1:-}" ]]; then
+		_help_msg
+	elif declare -f "$1" > /dev/null; then
+		printf "%s\n" "$("$@")"
+	else
+		error "$1 is not a known function name"
+		echo
+		_help_msg
+	fi
 fi

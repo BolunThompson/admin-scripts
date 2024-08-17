@@ -4,7 +4,7 @@
 
 # sigh, include guards. This feels like C.
 
-if [[ -n "$SCRIPTS_LIB_INCLUDED" ]]; then
+if [[ -n "${SCRIPTS_LIB_INCLUDED:-}" ]]; then
     return 0
 fi
 
@@ -35,10 +35,6 @@ success() {
 
 note() {
 	printf "NOTE: %s\n" "$1"
-}
-
-sourced() {
-   [[ "${BASH_SOURCE[0]}" != "${0}" ]]
 }
 
 ensure_root() {
