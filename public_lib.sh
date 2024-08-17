@@ -1,6 +1,4 @@
-#!/usr/bin/env bash
-
-# I separate out each function type in new folders if I wanted to
+# I could separate out each function type in new folders if I wanted to
 
 # NETWORK
 

@@ -1,7 +1,4 @@
-#!/usr/bin/env bash
-
 # could make cross platform if I needed to
-
 # sigh, include guards. This feels like C.
 
 if [[ -n "${SCRIPTS_LIB_INCLUDED:-}" ]]; then
