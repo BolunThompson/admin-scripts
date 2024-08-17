@@ -7,5 +7,5 @@ private_ip() {
 }
 
 public_ip() {
-  curl -s https://ipinfo.io/ip
+  curl -s https://ipinfo.io/ip -w "\n"
 }
