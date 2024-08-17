@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+
+. lib.sh
+. ,network_info
+
 set -uo pipefail
 
 readonly PUBLIC_IP=76.88.2.159
@@ -9,41 +13,8 @@ declare -ar EXP_PORTS=(22 3750 3751)
 
 trap 'echo; exit' INT
 
-if [[ -t 1 ]]; then
-	ERR_C='\e[0;31m'
-	WRN_C='\e[0;33m'
-	SUC_C='\e[0;32m'
-	RESET='\e[0m'
-fi
-
-# else unset
-
-error() {
-	printf "${ERR_C:-}ERROR: %s${RESET:-}\n" "$1"
-}
-
-warn() {
-	printf "${WRN_C:-}WARN: %s${RESET:-}\n" "$1"
-}
-
-success() {
-	printf "${SUC_C:-}SUCCESS: %s${RESET:-}\n" "$1"
-}
-
-note() {
-	printf "NOTE: %s\n" "$1"
-}
-
 is_online() {
 	ping -q -c2 "$1" &>/dev/null
-}
-
-public_ip() {
-	curl -s https://ipinfo.io/ip
-}
-
-private_ip() {
-	ip route get 1 | head -1 | cut -d' ' -f7
 }
 
 home_network_open() {
@@ -62,25 +33,6 @@ ssh_ping() {
 restart_services() {
 	sudo systemctl restart NetworkManager
 	sudo systemctl restart sshd.service
-}
-
-ensure_root() {
-	if [[ -z $1 ]]; then
-		read -r -s -p "Password for $USER: " password
-		echo >&2
-	else
-		local -r password="$1"
-	fi
-
-	# echo isn't safe because on different bash shells it can have different
-	# outputs in regards to escapes
-
-	# echo and printf are safe in regards to not showing up in ps
-	# because they are shell builtins
-
-	# herestrings aren't used because, one, they're less posix compliant,
-	# and, two, they're a little bit more confusing.
-	printf "%s" "$password" | tee >(sudo -p "" -Sv)
 }
 
 main() {

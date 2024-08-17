@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+if [[ -n "$SCRIPTS_NETWORK_INFO" ]]; then
+    return 0
+fi
+
+readonly SCRIPTS_NETWORK_INFO=yes
+
+public_ip() {
+	curl -s https://ipinfo.io/ip
+}
+
+private_ip() {
+	ip route get 1 | head -1 | cut -d' ' -f7
+}
+
+if [[ -n $1 ]]; then
+	printf "%s\n" "$("$@")"
+fi
