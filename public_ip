@@ -1,0 +1,2 @@
+. public_lib.sh
+public_ip "$@"

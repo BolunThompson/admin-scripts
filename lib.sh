@@ -21,6 +21,8 @@ fi
 
 # else unset
 
+# LOGGING
+
 error() {
 	printf "${ERR_C:-}ERROR: %s${RESET:-}\n" "$1"
 }
@@ -36,6 +38,8 @@ success() {
 note() {
 	printf "NOTE: %s\n" "$1"
 }
+
+# MISC
 
 ensure_root() {
 	if [[ -z $1 ]]; then
