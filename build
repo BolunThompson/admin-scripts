@@ -1,16 +1,49 @@
 #!/usr/bin/env bash
 
-. public_lib.sh
 
-for name in $(compgen -A function); do
-	cat >"bin/$name" <<-EOF
-	#!/usr/bin/env bash
+. lib.sh
+set -euo pipefail
 
-	. public_lib.sh
-	$name "\$@"
-	EOF
-done
+SCRIPT_TEMPLATE=$(cat <<"EOF"
+#!/usr/bin/env bash
 
-cp -r scripts/. bin/
+file_dir="$(dirname -- "$(realpath -- "$0")")"
+. "$file_dir/../lib.sh"
+%s "$@"
+EOF
+)
+readonly SCRIPT_TEMPLATE
 
-chmod -R +x bin/
+build() {
+	mkdir -p bin
+
+	for name in "${PLIB_FUNCS[@]}"; do
+		# quoting EOF disables variable expansion, for some reason.
+		# shellcheck disable=SC2059
+		printf "$SCRIPT_TEMPLATE" "$name" > "bin/$name"
+	done
+
+	cp -r scripts/. bin/
+	chmod -R +x bin/
+}
+
+clean() {
+	rm -rf bin/
+}
+
+main() {
+	if ! [[ -v 1 ]]; then
+		build
+		return
+	fi
+	case $1 in
+	build)
+		build
+		;;
+	clean)
+		clean
+		;;
+	esac
+}
+
+main "$@"

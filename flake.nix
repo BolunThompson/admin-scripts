@@ -6,19 +6,24 @@
 
   outputs = { self, nixpkgs }: {
 
-  stdenv.mkDerivation rec {
-    name = "bolun-scripts-${version}";
-    version = "1.0";
-    src = ./.;
+    defaultPackage.x86_64-linux =
 
-    nativeBuildInputs = [ ];
-    buildInputs = [ bitwarden-cli sshpass ];
-    buildPhase = "./build";
-    installPhase = ''
-      mkdir -p $out/bin
-      cp -r ./bin $out/bin
-    '';
+      with import nixpkgs { system = "x86_64-linux"; };
+      stdenv.mkDerivation rec {
+        name = "bolun-scripts-${version}";
+        version = "1.0";
+        src = ./.;
+
+        nativeBuildInputs = [ ];
+        buildInputs = [ bitwarden-cli sshpass ];
+        buildPhase = "bash ./build build";
+        installPhase = ''
+          mkdir -p $out
+          cp -r ./bin $out
+          cp lib.sh $out
+        '';
+      };
+
+
   };
-
-
 }
