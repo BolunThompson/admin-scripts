@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 # I could separate out each function type in new folders if I wanted to
 
 # NETWORK
