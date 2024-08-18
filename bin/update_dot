@@ -1,4 +1,0 @@
-#!/usr/bin/env bash
-
-. public_lib.sh
-update_dot "$@"
