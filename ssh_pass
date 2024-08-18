@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+
+. public_lib.sh
+ssh_pass "$@"
