@@ -3,10 +3,14 @@
 . public_lib.sh
 
 for name in $(compgen -A function); do
-	cat >"$name" <<-EOF
+	cat >"bin/$name" <<-EOF
 	#!/usr/bin/env bash
 
 	. public_lib.sh
 	$name "\$@"
 	EOF
 done
+
+cp -r scripts/. bin/
+
+chmod -R +x bin/

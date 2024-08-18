@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+
+. lib.sh
+
+set -uo pipefail
+
+readonly PUBLIC_IP=76.88.2.159
+readonly PRIVATE_IP=192.168.0.167
+readonly SSH_PORT=3750
+declare -ar EXP_PORTS=(22 3750 3751)
+
+trap 'echo; exit' INT
+
+is_online() {
+	ping -q -c2 "$1" &>/dev/null
+}
+
+home_network_open() {
+	timeout 2 nc -z "$PUBLIC_IP" "$1"
+}
+
+unban() {
+	sudo fail2ban-client unban --all
+}
+
+ssh_ping() {
+	SSHPASS="$1" sshpass -e \
+	ssh -o PreferredAuthentications=password -q "bolun@$PUBLIC_IP" -p "$SSH_PORT" exit
+}
+
+restart_services() {
+	sudo systemctl restart NetworkManager
+	sudo systemctl restart sshd.service
+}
+
+main() {
+	light -A 100 # to make diagnostics visiblw
+
+	local ssh_pwd
+	ssh_pwd=$(ensure_root "${1:-}")
+	restart_services
+
+	if is_online '192.168.0.1'; then
+		success "Router accessible"
+	else
+		error "Router inaccessible"
+	fi
+
+	if is_online '1.1.1.1'; then
+		success "Internet IPs accessible"
+	else
+		error "Internet IPs inaccessible"
+	fi
+
+	local ip
+	ip=$(public_ip)
+	if [[ $ip != "$PUBLIC_IP" ]]; then
+		error "Public IP has changed! The new IP is $ip"
+	else
+		success "Public IP is as expected"
+	fi
+	ip=$(private_ip)
+	if [[ $ip != "$PRIVATE_IP" ]]; then
+		error "Private IP has changed! The new IP is $ip"
+	else
+		success "Private IP is as expected"
+	fi
+
+	for port in "${EXP_PORTS[@]}"; do
+		if home_network_open "$port"; then
+			success "Port $port open"
+		elif [[ $? == 124 ]]; then
+			if [[ $port == 3751 ]] && home_network_open 3750; then
+				success "Port $port timed out as expected"
+			else
+				error "Port $port timed out"
+			fi
+		else
+			error "Port $port closed"
+		fi
+	done
+
+	local unbanned
+	if [[ ${unbanned:=$(unban)} == 0 ]]; then
+		success "No IPs unbanned"
+	else
+		warn "$unbanned IPs unbanned"
+	fi
+
+	echo
+
+	if ssh_ping "$ssh_pwd"; then
+		success "SSH works!"
+	else
+		error "SSH failed!"
+		read -r -p "Reboot? [y/n] " response
+		if [[ ${response,,} =~ ^(yes|y)$ ]]; then
+			shutdown -r now
+		fi
+	fi
+}
+
+main "$@"
