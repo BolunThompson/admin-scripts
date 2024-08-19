@@ -3,6 +3,7 @@
 . lib.sh
 set -euo pipefail
 
+# TODO: Is there a more elagant way to do this?
 # shellcheck disable=SC2016
 readonly MAGIC_SRC='"$(dirname -- "$(realpath -- "$0")")/../"'
 

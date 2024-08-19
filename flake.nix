@@ -14,14 +14,30 @@
         version = "1.0";
         src = ./.;
 
-        nativeBuildInputs = [ ];
-        # only some functions require some scripts, but, as of right now,
-        # all of these are fundemental enough that I can assume I can have them
-        buildInputs = [ bitwarden-cli sshpass ];
+        nativeBuildInputs = [ makeWrapper ];
+        buildInputs = [ coreutils ];
+
+        postInstall =
+          let
+            wrapperPath = lib.makeBinPath [
+              coreutils
+              git
+              bitwarden-cli
+              sshpass
+              openssh
+            ];
+          in
+          ''
+            for program in $out/bin/*; do
+              wrapProgram "$program" --prefix PATH : "${wrapperPath}"
+            done
+          '';
         installPhase = ''
-          mkdir -p $out
-          cp -r ./bin $out
-          cp lib.sh $out
+          runHook preInstall
+          mkdir -p "$out"
+          cp -r ./bin "$out"
+          cp lib.sh "$out"
+          runHook postInstall
         '';
       };
   };
