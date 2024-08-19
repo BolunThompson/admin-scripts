@@ -10,7 +10,7 @@
 
       with import nixpkgs { system = "x86_64-linux"; };
       stdenv.mkDerivation rec {
-        name = "admin-scripts-${version}";
+        name = "admin-scripts";
         version = "1.0";
         src = ./.;
 
@@ -23,7 +23,5 @@
           cp lib.sh $out
         '';
       };
-
-
   };
 }
