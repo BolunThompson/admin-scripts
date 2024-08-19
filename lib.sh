@@ -89,5 +89,5 @@ ssh_poweroff() {
 	fi
 }
 
-PLIB_FUNCS=("private_ip" "public_ip" "ssh_pass" "update_dot" "ssh_poweroff")
+PLIB_FUNCS=("private_ip" "public_ip" "ssh_pass" "update_dot" "ssh_poweroff" "passphrase")
 export PLIB_FUNCS
