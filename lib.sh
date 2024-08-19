@@ -3,8 +3,8 @@
 # could make cross platform if I needed to
 # sigh, include guards. This feels like C.
 
-if [[ -n "${SCRIPTS_LIB_INCLUDED:-}" ]]; then
-    return 0
+if [[ -n ${SCRIPTS_LIB_INCLUDED:-} ]]; then
+	return 0
 fi
 
 readonly SCRIPTS_LIB_INCLUDED=yes
@@ -61,24 +61,24 @@ ensure_root() {
 # NETWORK
 
 private_ip() {
-  ip route get 1 | head -1 | cut -d' ' -f7
+	ip route get 1 | head -1 | cut -d' ' -f7
 }
 
 public_ip() {
-  curl -s https://ipinfo.io/ip -w "\n"
+	curl -s https://ipinfo.io/ip -w "\n"
 }
 
 # factored out in case I switch password managers
 ssh_pass() {
-  bw get password SSH
+	bw get password SSH
 }
 
 update_dot() {
-  cd /etc/nixos/ || return
-  git add home.nix configuration.nix flake.nix
-  git commit -m "$1"
-  git push <<< "$(ssh_pass)"
-  sudo nixos-rebuild switch
+	cd /etc/nixos/ || return
+	git add home.nix configuration.nix flake.nix
+	git commit -m "$1"
+	git push <<<"$(ssh_pass)"
+	sudo nixos-rebuild switch
 }
 
 PLIB_FUNCS=("private_ip" "public_ip" "ssh_pass" "update_dot")

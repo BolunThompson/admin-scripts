@@ -25,7 +25,7 @@ unban() {
 
 ssh_ping() {
 	SSHPASS="$1" sshpass -e \
-	ssh -o PreferredAuthentications=password -q "bolun@$PUBLIC_IP" -p "$SSH_PORT" exit
+		ssh -o PreferredAuthentications=password -q "bolun@$PUBLIC_IP" -p "$SSH_PORT" exit
 }
 
 restart_services() {
