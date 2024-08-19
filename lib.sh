@@ -69,7 +69,7 @@ public_ip() {
 }
 
 # factored out in case I switch password managers
-ssh_pass() {
+passphrase() {
 	bw get password SSH
 }
 
@@ -77,7 +77,7 @@ update_dot() {
 	cd /etc/nixos/ || return
 	git add home.nix configuration.nix flake.nix
 	git commit -m "$1"
-	git push <<<"$(ssh_pass)"
+	git push <<<"$(passphrase)"
 	sudo nixos-rebuild switch
 }
 

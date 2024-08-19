@@ -3,13 +3,15 @@
 . lib.sh
 set -euo pipefail
 
+# shellcheck disable=SC2016
+readonly MAGIC_SRC='"$(dirname -- "$(realpath -- "$0")")/../"'
+
 SCRIPT_TEMPLATE=$(
-	cat <<"EOF"
+	cat <<EOF
 #!/usr/bin/env bash
 
-file_dir="$(dirname -- "$(realpath -- "$0")")"
-. "$file_dir/../lib.sh"
-%s "$@"
+. $MAGIC_SRC/lib.sh
+%s "\$@"
 EOF
 )
 readonly SCRIPT_TEMPLATE
@@ -17,13 +19,18 @@ readonly SCRIPT_TEMPLATE
 build() {
 	mkdir -p bin
 
+	cp -r scripts/. bin/
+	for script in scripts/*; do
+		local bin_script
+		bin_script="bin/$(basename -- "$script")"
+		sed -E 's/^\. (\w+)/\. _@STNL@_\1/g' "$script" \
+			| sed "s#_@STNL@_#$MAGIC_SRC#g" > "$bin_script"
+	done
 	for name in "${PLIB_FUNCS[@]}"; do
-		# quoting EOF disables variable expansion, for some reason.
 		# shellcheck disable=SC2059
 		printf "$SCRIPT_TEMPLATE" "$name" >"bin/$name"
 	done
 
-	cp -r scripts/. bin/
 	chmod -R +x bin/
 }
 

@@ -24,8 +24,7 @@ unban() {
 }
 
 ssh_ping() {
-	SSHPASS="$1" sshpass -e \
-		ssh -o PreferredAuthentications=password -q "bolun@$PUBLIC_IP" -p "$SSH_PORT" exit
+	sshpass ssh -o PreferredAuthentications=password -q "bolun@$PUBLIC_IP" -p "$SSH_PORT" exit <<< "$1" 2> /dev/null
 }
 
 restart_services() {
@@ -91,6 +90,8 @@ main() {
 
 	if ssh_ping "$ssh_pwd"; then
 		success "SSH works!"
+	elif [[ $? == 127 ]]; then
+		error "sshpass not found! SSH cannot be tested."
 	else
 		error "SSH failed!"
 		read -r -p "Reboot? [y/n] " response
