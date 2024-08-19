@@ -1,6 +1,6 @@
 {
 
-  description = "bolun-scripts";
+  description = "admin-scripts";
 
   inputs.nixpkgs.url = github:NixOS/nixpkgs/nixos-unstable;
 
@@ -10,7 +10,7 @@
 
       with import nixpkgs { system = "x86_64-linux"; };
       stdenv.mkDerivation rec {
-        name = "bolun-scripts-${version}";
+        name = "admin-scripts-${version}";
         version = "1.0";
         src = ./.;
 
