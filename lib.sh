@@ -81,5 +81,13 @@ update_dot() {
 	sudo nixos-rebuild switch
 }
 
-PLIB_FUNCS=("private_ip" "public_ip" "ssh_pass" "update_dot")
+ssh_poweroff() {
+	if [[ -n $SSH_CLIENT ]]; then
+		echo "Do you really want to do that?"
+	else
+		poweroff
+	fi
+}
+
+PLIB_FUNCS=("private_ip" "public_ip" "ssh_pass" "update_dot" "ssh_poweroff")
 export PLIB_FUNCS
