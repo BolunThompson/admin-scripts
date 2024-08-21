@@ -1,3 +1,5 @@
 archive
 bin
 result
+.direnv/
+.envrc
