@@ -96,7 +96,7 @@ update_dot() {
 		sudo nixpkgs-fmt ./*.nix  > /dev/null 2>&1
 		sudo git add --all
 	fi
-	sudo git commit -m "$MSG"
+	sudo git commit -m "$MSG" || true
 	sudo git push
 	sudo nixos-rebuild switch
 }
@@ -115,6 +115,14 @@ update_scripts() {
 	sudo nixos-rebuild switch
 }
 
+update_templates() {
+	assert_argc 1 "$@"
+	cd ~/templates || return
+	git add --all
+	git commit -m "$1" || true
+	git push
+}
+
 ssh_poweroff() {
 	if [[ -n $SSH_CLIENT ]]; then
 		echo "Do you really want to do that?"
@@ -129,6 +137,7 @@ readonly PLIB_FUNCS=(
 	"ssh_pass"
 	"update_dot"
 	"update_scripts"
+	"update_templates"
 	"ssh_poweroff"
 	"passphrase"
 )
