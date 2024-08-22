@@ -89,7 +89,7 @@ update_dot() {
 	cd "$CONFIG" || return
 	sudo git add --all
 	sudo git commit -m "$1"
-	git push
+	sudo git push
 	sudo nixpkgs-fmt ./*.nix  > /dev/null 2>&1
 	sudo nixos-rebuild switch
 }
