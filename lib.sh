@@ -90,13 +90,14 @@ update_dot() {
 	local MSG="$1"
 	shift
 	if [[ $# -gt 0 ]]; then
+		sudo nixpkgs-fmt "$@"  > /dev/null 2>&1
 		sudo git add "$@"
 	else
+		sudo nixpkgs-fmt ./*.nix  > /dev/null 2>&1
 		sudo git add --all
 	fi
 	sudo git commit -m "$MSG"
 	sudo git push
-	sudo nixpkgs-fmt ./*.nix  > /dev/null 2>&1
 	sudo nixos-rebuild switch
 }
 
