@@ -101,6 +101,20 @@ update_dot() {
 	sudo nixos-rebuild switch
 }
 
+update_scripts() {
+	assert_argc 1 "$@"
+	cd ~/scripts || return
+	git add --all
+	git commit -m "$1" || true
+	git push
+	cd "$CONFIG" || return
+	sudo nix flake update
+	sudo git add flake.lock
+	sudo git commit -m "Update flake.lock"
+	sudo git push
+	sudo nixos-rebuild switch
+}
+
 ssh_poweroff() {
 	if [[ -n $SSH_CLIENT ]]; then
 		echo "Do you really want to do that?"
@@ -114,6 +128,7 @@ readonly PLIB_FUNCS=(
 	"public_ip"
 	"ssh_pass"
 	"update_dot"
+	"update_scripts"
 	"ssh_poweroff"
 	"passphrase"
 )
