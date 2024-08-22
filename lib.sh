@@ -8,6 +8,8 @@ if [[ -n ${SCRIPTS_LIB_INCLUDED:-} ]]; then
 fi
 
 readonly SCRIPTS_LIB_INCLUDED=yes
+readonly CONFIG=/etc/nixos/
+export CONFIG
 
 set -euo pipefail
 
@@ -74,10 +76,9 @@ passphrase() {
 }
 
 update_dot() {
-	cd /etc/nixos/ || return
-	git add home.nix configuration.nix flake.nix
+	cd "$CONFIG" || return
+	git add --all
 	git commit -m "$1"
-	git push <<<"$(passphrase)"
 	sudo nixos-rebuild switch
 }
 
@@ -89,7 +90,7 @@ ssh_poweroff() {
 	fi
 }
 
-PLIB_FUNCS=(
+readonly PLIB_FUNCS=(
 	"private_ip"
 	"public_ip"
 	"ssh_pass"

@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+
+. lib.sh
+
+set -euo pipefail
+
+main() {
+	sudo ed -sq "$CONFIG/home.nix" >/dev/null <<- EOF
+	/# END PACKAGES/
+	-a
+	$1
+	.
+	wq
+	EOF
+	sudo nixpkgs-fmt "$CONFIG/home.nix" > /dev/null 2>&1
+	sudo nixos-rebuild switch
+}
+
+main "$@"
