@@ -60,6 +60,15 @@ ensure_root() {
 	printf "%s" "$password" | tee >(sudo -p "" -Sv)
 }
 
+assert_argc() {
+	local argc="$1"
+	shift
+	if [[  $argc != "$#" ]]; then
+		error "$argc args expected but $# passed!"
+		exit
+	fi
+}
+
 # NETWORK
 
 private_ip() {
@@ -76,9 +85,11 @@ passphrase() {
 }
 
 update_dot() {
+	assert_argc 1
 	cd "$CONFIG" || return
-	git add --all
-	git commit -m "$1"
+	sudo git add --all
+	sudo git commit -m "$1"
+	nixpkgs-fmt ./*.nix  > /dev/null 2>&1
 	sudo nixos-rebuild switch
 }
 

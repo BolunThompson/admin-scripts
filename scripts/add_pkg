@@ -5,15 +5,15 @@
 set -euo pipefail
 
 main() {
+	assert_argc 1 "$@"
 	sudo ed -sq "$CONFIG/home.nix" >/dev/null <<- EOF
-	/# END PACKAGES/
+	/END PACKAGES/
 	-a
 	$1
 	.
 	wq
 	EOF
-	sudo nixpkgs-fmt "$CONFIG/home.nix" > /dev/null 2>&1
-	sudo nixos-rebuild switch
+	update_dot "Added package $1 to home.nix"
 }
 
 main "$@"
