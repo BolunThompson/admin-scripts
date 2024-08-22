@@ -86,7 +86,7 @@ passphrase() {
 
 update_dot() {
 	assert_argc 1 "$@"
-	cd "$CONFIG" || return
+	cd "$CONFIG"
 	local MSG="$1"
 	shift
 	if [[ $# -gt 0 ]]; then

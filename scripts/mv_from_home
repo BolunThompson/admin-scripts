@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+readonly EXCLUDE=(
+	"README"
+)
+
+main() {
+	mkdir -p ~/Archive/home_misc/
+	# for once word spliting comes in handy
+	# shellcheck disable=SC2046
+	find "$HOME" -maxdepth 1 -type f ! -name '.*' \
+		$(printf "! -name %s " "${EXCLUDE[@]}") \
+		-exec mv {} ~/Archive/home_misc/ \;
+}
+
+main "$@"
