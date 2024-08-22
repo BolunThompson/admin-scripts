@@ -13,7 +13,7 @@ main() {
 	.
 	wq
 	EOF
-	update_dot "Added package $1 to home.nix"
+	update_dot "Added package $1 to home.nix" "$CONFIG/home.mix"
 }
 
 main "$@"

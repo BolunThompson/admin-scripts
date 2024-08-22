@@ -87,8 +87,14 @@ passphrase() {
 update_dot() {
 	assert_argc 1 "$@"
 	cd "$CONFIG" || return
-	sudo git add --all
-	sudo git commit -m "$1"
+	local MSG="$1"
+	shift
+	if [[ $# -gt 0 ]]; then
+		sudo git add "$@"
+	else
+		sudo git add --all
+	fi
+	sudo git commit -m "$MSG"
 	sudo git push
 	sudo nixpkgs-fmt ./*.nix  > /dev/null 2>&1
 	sudo nixos-rebuild switch
