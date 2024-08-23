@@ -28,7 +28,7 @@
             version = "1.0";
             src = ./.;
 
-            nativeBuildInputs = [ coreutils makeWrapper ];
+            nativeBuildInputs = [ coreutils makeWrapper gnused ];
 
             # TODO: Create dev shell
 
@@ -41,6 +41,9 @@
                   bitwarden-cli
                   sshpass
                   openssh
+                  findutils
+                  gnugrep
+                  gnused
                 ];
               in
               ''
