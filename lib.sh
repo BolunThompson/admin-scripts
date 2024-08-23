@@ -134,7 +134,6 @@ ssh_poweroff() {
 readonly PLIB_FUNCS=(
 	"private_ip"
 	"public_ip"
-	"ssh_pass"
 	"update_dot"
 	"update_scripts"
 	"update_templates"
