@@ -63,9 +63,9 @@ ensure_root() {
 assert_argc() {
 	local argc="$1"
 	shift
-	if [[  $argc != "$#" ]]; then
+	if [[  $argc -gt "$#" ]]; then
 		error "$argc args expected but $# passed!"
-		exit
+		exit 1
 	fi
 }
 
@@ -103,11 +103,11 @@ update_dot() {
 
 update_scripts() {
 	assert_argc 1 "$@"
-	cd ~/scripts || return
+	cd ~/scripts
 	git add --all
 	git commit -m "$1" || true
 	git push
-	cd "$CONFIG" || return
+	cd "$CONFIG"
 	sudo nix flake update
 	sudo git add flake.lock
 	sudo git commit -m "Update flake.lock"
@@ -117,7 +117,7 @@ update_scripts() {
 
 update_templates() {
 	assert_argc 1 "$@"
-	cd ~/templates || return
+	cd ~/templates
 	git add --all
 	git commit -m "$1" || true
 	git push
