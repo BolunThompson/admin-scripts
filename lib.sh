@@ -11,8 +11,6 @@ readonly SCRIPTS_LIB_INCLUDED=yes
 readonly CONFIG=/etc/nixos/
 export CONFIG
 
-set -euo pipefail
-
 if [[ -t 1 ]]; then
 	ERR_C='\e[0;31m'
 	WRN_C='\e[0;33m'
@@ -25,15 +23,15 @@ fi
 # LOGGING
 
 error() {
-	printf "${ERR_C:-}ERROR: %s${RESET:-}\n" "$1"
+	printf "${ERR_C}ERROR: %s$RESET\n" "$1"
 }
 
 warn() {
-	printf "${WRN_C:-}WARN: %s${RESET:-}\n" "$1"
+	printf "${WRN_C}WARN: %s$RESET\n" "$1"
 }
 
 success() {
-	printf "${SUC_C:-}SUCCESS: %s${RESET:-}\n" "$1"
+	printf "${SUC_C}SUCCESS: %s$RESET\n" "$1"
 }
 
 note() {

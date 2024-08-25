@@ -2,8 +2,6 @@
 
 . lib.sh
 
-set -euo pipefail
-
 main() {
 	assert_argc 1 "$@"
 	sudo ed -sq "$CONFIG/home.nix" >/dev/null <<- EOF

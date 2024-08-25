@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 . lib.sh
-set -euo pipefail
+
 
 # TODO: Is there a more elagant way to do this?
 # shellcheck disable=SC2016

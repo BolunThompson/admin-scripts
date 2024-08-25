@@ -2,8 +2,6 @@
 
 . lib.sh
 
-set -uo pipefail
-
 readonly PUBLIC_IP=76.88.2.159
 readonly PRIVATE_IP=192.168.0.167
 readonly SSH_PORT=3750
