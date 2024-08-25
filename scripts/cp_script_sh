@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+
+. lib.sh
+
+readonly SCRIPT_URL=https://raw.githubusercontent.com/BolunThompson/admin-scripts/main/scripts
+
+# only works for standalone scripts
+
+main() {
+	assert_argc 1 "$@"
+	local URL="$SCRIPT_URL/$1"
+	if ! is_online "$URL"; then
+		error "invalid script!" >&2
+		return 1
+	else
+		printf "sh <(curl '$SCRIPT_URL/%s')" "$1" | tee >(osc-copy)
+	fi
+}
+
+main "$@"
