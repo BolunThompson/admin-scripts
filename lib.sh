@@ -61,7 +61,7 @@ ensure_root() {
 assert_argc() {
 	local argc="$1"
 	shift
-	if [[  $argc -gt "$#" ]]; then
+	if [[ $argc -gt $# ]]; then
 		error "$argc args expected but $# passed!"
 		exit 1
 	fi
@@ -88,10 +88,10 @@ update_dot() {
 	local MSG="$1"
 	shift
 	if [[ $# -gt 0 ]]; then
-		sudo nixpkgs-fmt "$@"  > /dev/null 2>&1
+		sudo nixpkgs-fmt "$@" >/dev/null 2>&1
 		sudo git add "$@"
 	else
-		sudo nixpkgs-fmt ./*.nix  > /dev/null 2>&1
+		sudo nixpkgs-fmt ./*.nix >/dev/null 2>&1
 		sudo git add --all
 	fi
 	sudo git commit -m "$MSG" || true
