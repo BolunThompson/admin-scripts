@@ -9,14 +9,6 @@ declare -ar EXP_PORTS=(22 3750 3751)
 
 trap 'echo; exit' INT
 
-is_online() {
-	ping -q -c2 "$1" &>/dev/null
-}
-
-home_network_open() {
-	timeout 2 nc -z "$PUBLIC_IP" "$1"
-}
-
 unban() {
 	sudo fail2ban-client unban --all
 }
@@ -66,10 +58,10 @@ main() {
 	fi
 
 	for port in "${EXP_PORTS[@]}"; do
-		if home_network_open "$port"; then
+		if is_online "$PUBLIC_IP" "$port"; then
 			success "Port $port open"
 		elif [[ $? == 124 ]]; then
-			if [[ $port == 3751 ]] && home_network_open 3750; then
+			if [[ $port == 3751 ]] && is_online "$PUBLIC_IP" 3750; then
 				success "Port $port timed out as expected"
 			else
 				error "Port $port timed out"

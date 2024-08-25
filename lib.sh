@@ -77,6 +77,37 @@ public_ip() {
 	curl -s https://ipinfo.io/ip -w "\n"
 }
 
+is_online() {
+	assert_argc 1 "$@"
+	if ! [[ -v 2 ]]; then
+		# attempts to detect the existence of a subdirectory
+		if [[ $1 =~ / ]]; then
+			curl -o /dev/null --head --silent --fail "$1"
+		else
+			ping -q -c2 "$1" &>/dev/null
+		fi
+	else
+		local ncr
+		ncr="$(nc -v -w 2 -z "$1" "$2" 2>&1)"
+
+		case "$ncr" in
+		*timed\ out)
+			return 124
+			;;
+		*refused)
+			return 111
+			;;
+		*open)
+			return 0
+			;;
+		*)
+			error "Unknown response: $ncr"
+			return
+			;;
+		esac
+	fi
+} >&2
+
 # factored out in case I switch password managers
 passphrase() {
 	bw get password SSH
@@ -137,5 +168,6 @@ readonly PLIB_FUNCS=(
 	"update_templates"
 	"ssh_poweroff"
 	"passphrase"
+	"is_online"
 )
 export PLIB_FUNCS
