@@ -115,7 +115,7 @@ passphrase() {
 
 update_dot() {
 	assert_argc 1 "$@"
-	cd "$CONFIG"
+	cd "$CONFIG" || return
 	local MSG="$1"
 	shift
 	if [[ $# -gt 0 ]]; then
@@ -132,12 +132,12 @@ update_dot() {
 
 update_scripts() {
 	if [[ -v 1 ]]; then
-		cd ~/scripts
+		cd ~/scripts || return
 		git add --all
 		git commit -m "$1" || true
 		git push
 	fi
-	cd "$CONFIG"
+	cd "$CONFIG" || return
 	sudo nix flake update
 	sudo git add flake.lock
 	sudo git commit -m "Update flake.lock"
@@ -147,7 +147,7 @@ update_scripts() {
 
 update_templates() {
 	assert_argc 1 "$@"
-	cd ~/templates
+	cd ~/templates || return
 	git add --all
 	git commit -m "$1" || true
 	git push
