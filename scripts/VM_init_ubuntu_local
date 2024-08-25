@@ -1,0 +1,66 @@
+#!/bin/sh
+# shellcheck disable=SC2086
+
+# MEANT TO RUN ON THE VM.
+# Cannot import local scripts.
+# Make posix compliant in case I port to alpine/ash.
+# Assumes root user.
+
+set -f # disable globbing in splits in case there's a weird ppa or package name
+
+# maybe it would be better to create a custom dockerfile,
+# but, right now, this is for setting up a dev environment on a 
+# non-development container
+
+
+readonly PACKAGES='
+  fish
+  tmux
+  helix
+  ripgrep
+  bat
+  git
+  clangd
+  clang-format
+  curl
+  less
+'
+readonly PPAS='
+  ppa:maveonair/helix-editor
+'
+
+copy() {
+  local paths=""
+  local cnt=$(($# / 2))
+  for _ in $(seq $cnt); do
+    paths="$paths -o %s https://raw.githubusercontent.com/BolunThompson/dotfiles/main/%s"
+  done
+  # shellcheck disable=SC2046
+  # shellcheck disable=SC2059
+  # printf "$paths" "$@"
+  curl --create-dirs --parallel --parallel-immediate $(printf "$paths" "$@")
+   
+}
+
+unminimize || true # if the system has been minimized
+apt install -y software-properties-common
+add-apt-repository -y -- $PPAS 
+apt update -y
+apt install -y -- $PACKAGES
+
+ln -s /usr/bin/batcat /usr/local/bin/bat
+
+# I'm not SCPing my fish.config b/c, besides from thefuck init,
+# there's nothing there that'd be useful on a remote VM, right now, 
+# and I'd have to deal with system specific stuff
+
+# I assume jupyter will be managed by the VM host, so I'm not going to
+# SCP that over as well
+
+cd || echo "No home; depositing files in current dir."
+
+copy .tmux.conf tmux.conf \
+     .config/helix/config.toml helix_settings.toml \
+     .config/helix/languages.toml helix_languages.toml \
+     .config/git/config gitconfig \
+# I'm not cping my (half-working) vim config because I have helix
