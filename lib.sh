@@ -131,11 +131,12 @@ update_dot() {
 }
 
 update_scripts() {
-	assert_argc 1 "$@"
-	cd ~/scripts
-	git add --all
-	git commit -m "$1" || true
-	git push
+	if [[ -v 1 ]]; then
+		cd ~/scripts
+		git add --all
+		git commit -m "$1" || true
+		git push
+	fi
 	cd "$CONFIG"
 	sudo nix flake update
 	sudo git add flake.lock
