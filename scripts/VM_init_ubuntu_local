@@ -63,4 +63,6 @@ copy .tmux.conf tmux.conf \
      .config/helix/config.toml helix_settings.toml \
      .config/helix/languages.toml helix_languages.toml \
      .config/git/config gitconfig \
+     # glow isn't packaged in ubunutu 22.04, so there isn't a point
+     # .config/glow/glow.yml glow.yml \
 # I'm not cping my (half-working) vim config because I have helix
