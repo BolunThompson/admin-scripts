@@ -31,9 +31,10 @@ readonly PPAS='
 
 copy() {
   local paths=""
-  local cnt=$(($# / 2))
-  for _ in $(seq $cnt); do
+  local -i i=0
+  while [ $i -ne $# ]; do
     paths="$paths -o %s https://raw.githubusercontent.com/BolunThompson/dotfiles/main/%s"
+    i=$((i+2))
   done
   # shellcheck disable=SC2046
   # shellcheck disable=SC2059
