@@ -3,15 +3,14 @@
 . lib.sh
 
 main() {
-	assert_argc 1 "$@"
 	sudo ed -sq "$CONFIG/home.nix" >/dev/null <<- EOF
 	/END PACKAGES/
 	-a
-	$1
+	$@
 	.
 	wq
 	EOF
-	update_dot "Add package $1 to home.nix" "$CONFIG/home.nix"
+	update_dot "Add package $@ to home.nix" "$CONFIG/home.nix"
 }
 
 main "$@"
