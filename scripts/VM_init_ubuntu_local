@@ -32,16 +32,17 @@ readonly PPAS='
 copy() {
   local paths=""
   local i=0
+  cd "$(mktemp -d)"
+  git clone https://github.com/BolunThompson/dotfiles.git
+  cd dotfiles
   while [ $i -ne $# ]; do
-    paths="$paths -o %s https://raw.githubusercontent.com/BolunThompson/dotfiles/main/%s"
+    paths="$paths cp %s %s;"
     i=$((i+2))
   done
   # shellcheck disable=SC2046
   # shellcheck disable=SC2059
-  # printf "$paths" "$@"
-  curl --create-dirs --parallel --parallel-immediate $(printf "$paths" "$@")
-   
-}
+  eval $(printf "$paths" "$@")
+ }
 
 unminimize || true # if the system has been minimized
 apt install -y software-properties-common
@@ -58,13 +59,12 @@ ln -s /usr/bin/batcat /usr/local/bin/bat
 # I assume jupyter will be managed by the VM host, so I'm not going to
 # SCP that over as well
 
-cd || echo "No home; depositing files in current dir."
 
-copy .tmux.conf tmux.conf \
-     .config/helix/config.toml helix_settings.toml \
-     .config/helix/languages.toml helix_languages.toml \
-     .config/git/config gitconfig \
-     /usr/local/bin/imgcat assets/imgcat
+copy tmux.conf ~/.tmux.conf \
+     helix_settings.toml ~/.config/helix/config.toml \
+     helix_languages.toml ~/.config/helix/languages.toml \
+     gitconfig ~/.config/git/config \
+     assets/imgcat /usr/local/bin/imgcat
      # glow isn't packaged in ubunutu 22.04, so there isn't a point
      # .config/glow/glow.yml glow.yml \
 # I'm not cping my (half-working) vim config because I have helix
