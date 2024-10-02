@@ -50,7 +50,7 @@ add-apt-repository -y -- $PPAS
 apt update -y
 apt install -y -- $PACKAGES
 
-ln -s /usr/bin/batcat /usr/local/bin/bat
+ln -sf /usr/bin/batcat /usr/local/bin/bat
 
 # I'm not SCPing my fish.config b/c, besides from thefuck init,
 # there's nothing there that'd be useful on a remote VM, right now, 
