@@ -7,6 +7,9 @@
 # shellcheck disable=SC2016
 readonly MAGIC_SRC='"$(dirname -- "$(realpath -- "$0")")/../"'
 
+# TODO: This really should be a proper configure/autotools script instead of
+# a handrolled build script (or something of like that).
+
 SCRIPT_TEMPLATE=$(
 	cat <<EOF
 #!/usr/bin/env bash
@@ -19,8 +22,9 @@ readonly SCRIPT_TEMPLATE
 
 build() {
 	mkdir -p bin
+	# cp progs/* bin
+	# cp -r assets bin
 
-	cp -r scripts/. bin/
 	for script in scripts/*; do
 		local bin_script
 		bin_script="bin/$(basename -- "$script")"

@@ -31,7 +31,7 @@ readonly PPAS='
 
 copy() {
   local paths=""
-  local -i i=0
+  local i=0
   while [ $i -ne $# ]; do
     paths="$paths -o %s https://raw.githubusercontent.com/BolunThompson/dotfiles/main/%s"
     i=$((i+2))
@@ -64,6 +64,7 @@ copy .tmux.conf tmux.conf \
      .config/helix/config.toml helix_settings.toml \
      .config/helix/languages.toml helix_languages.toml \
      .config/git/config gitconfig \
+     /usr/local/bin/imgcat assets/imgcat
      # glow isn't packaged in ubunutu 22.04, so there isn't a point
      # .config/glow/glow.yml glow.yml \
 # I'm not cping my (half-working) vim config because I have helix
