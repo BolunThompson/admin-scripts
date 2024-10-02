@@ -24,6 +24,8 @@ readonly PACKAGES='
   clang-format
   curl
   less
+  meson
+  ninja-build
 '
 readonly PPAS='
   ppa:maveonair/helix-editor
