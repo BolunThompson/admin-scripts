@@ -33,17 +33,14 @@ readonly PPAS='
 
 copy() {
   local paths=""
-  local i=0
-  cd "$(mktemp -d)"
+  cd "$(mktemp -d)" || return
   git clone https://github.com/BolunThompson/dotfiles.git
-  cd dotfiles
-  while [ $i -ne $# ]; do
-    paths="$paths cp %s %s;"
-    i=$((i+2))
+  cd dotfiles || return
+  while ! [ $# -eq 0 ]; do
+    paths="$paths mkdir -p $(dirname $2); cp $1 $2;"
+    shift 2
   done
-  # shellcheck disable=SC2046
-  # shellcheck disable=SC2059
-  eval $(printf "$paths" "$@")
+  eval "$paths"
  }
 
 unminimize || true # if the system has been minimized
