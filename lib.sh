@@ -163,9 +163,10 @@ rebuild() {
 	if command -v nixos-rebuild; then
 		sudo nixos-rebuild switch --flake "$NIX_CONFIG"
 	elif command -v darwin-rebuild; then
+		sudo scutil --set LocalHostName "UCLAMac"
 		sudo nixos-rebuild switch --flake "$NIX_CONFIG"
 	else
-		error "No rebuild comand available!"
+		error "No rebuild command available!"
 		exit 1
 	fi	
 }

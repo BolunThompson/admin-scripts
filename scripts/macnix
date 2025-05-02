@@ -8,7 +8,7 @@ PAT="$1"
 
 xcode-select --install
 
-git clone "https://BolunThompson@$PAT:github.com/BolunThompson/dotfiles.git" config/
+git clone "https://BolunThompson@$PAT:github.com/BolunThompson/dotfiles.git"
 
 curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install --no-confirm
 
