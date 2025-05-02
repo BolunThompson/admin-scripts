@@ -8,8 +8,6 @@ if [[ -n $SCRIPTS_LIB_INCLUDED ]]; then
 fi
 
 readonly SCRIPTS_LIB_INCLUDED=yes
-readonly CONFIG=/etc/nixos/
-export CONFIG
 
 if [[ -t 1 ]]; then
 	ERR_C='\e[0;31m'
@@ -115,7 +113,7 @@ passphrase() {
 
 update_dot() {
 	assert_argc 1 "$@"
-	cd "$CONFIG" || return
+	cd "$NIX_CONFIG" || return
 	local MSG="$1"
 	shift
 	if [[ $# -gt 0 ]]; then
@@ -127,7 +125,7 @@ update_dot() {
 	fi
 	sudo git commit -m "$MSG" || true
 	sudo git push
-	sudo nixos-rebuild switch
+	rebuild
 }
 
 update_scripts() {
@@ -137,12 +135,12 @@ update_scripts() {
 		git commit -m "$1" || true
 		git push
 	fi
-	cd "$CONFIG" || return
+	cd "$NIX_CONFIG" || return
 	sudo nix flake update
 	sudo git add flake.lock
 	sudo git commit -m "Update flake.lock"
 	sudo git push
-	sudo nixos-rebuild switch
+	rebuild
 }
 
 update_templates() {
@@ -161,6 +159,17 @@ ssh_poweroff() {
 	fi
 }
 
+rebuild() {
+	if command -v nixos-rebuild; then
+		sudo nixos-rebuild switch --flake "$NIX_CONFIG"
+	elif command -v darwin-rebuild; then
+		sudo nixos-rebuild switch --flake "$NIX_CONFIG"
+	else
+		error "No rebuild comand available!"
+		exit 1
+	fi	
+}
+
 readonly PLIB_FUNCS=(
 	"private_ip"
 	"public_ip"
@@ -170,5 +179,6 @@ readonly PLIB_FUNCS=(
 	"ssh_poweroff"
 	"passphrase"
 	"is_online"
+	"rebuild"
 )
 export PLIB_FUNCS

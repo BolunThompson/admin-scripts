@@ -3,7 +3,7 @@
 . lib.sh
 
 main() {
-	sudo ed -sq "$CONFIG/home.nix" >/dev/null <<- EOF
+	sudo ed -sq "$NIX_CONFIG/home.nix" >/dev/null <<- EOF
 	/END PACKAGES/
 	-a
 	$@
