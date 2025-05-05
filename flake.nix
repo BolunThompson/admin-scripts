@@ -26,7 +26,6 @@
           findutils
           gnugrep
           gnused
-          wkhtmltopdf
           bat
           python
         ];
