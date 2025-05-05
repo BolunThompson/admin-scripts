@@ -106,6 +106,18 @@ is_online() {
 	fi
 } >&2
 
+rebuild() {
+	if command -v nixos-rebuild >/dev/null 2>&1; then
+		sudo nixos-rebuild switch --flake "~/config"
+	elif command -v darwin-rebuild >/dev/null 2>&1; then
+		sudo scutil --set LocalHostName "UCLAMac"
+		darwin-rebuild switch --flake "~/config"
+	else
+		error "No rebuild command available!"
+		exit 1
+	fi	
+}
+
 # factored out in case I switch password managers
 passphrase() {
 	bw get password SSH
@@ -113,7 +125,7 @@ passphrase() {
 
 update_dot() {
 	assert_argc 1 "$@"
-	cd "$NIX_CONFIG" || return
+	cd "~/config" || return
 	local MSG="$1"
 	shift
 	if [[ $# -gt 0 ]]; then
@@ -135,7 +147,7 @@ update_scripts() {
 		git commit -m "$1" || true
 		git push
 	fi
-	cd "$NIX_CONFIG" || return
+	cd "~/config" || return
 	sudo nix flake update
 	sudo git add flake.lock
 	sudo git commit -m "Update flake.lock"
@@ -157,18 +169,6 @@ ssh_poweroff() {
 	else
 		poweroff
 	fi
-}
-
-rebuild() {
-	if command -v nixos-rebuild; then
-		sudo nixos-rebuild switch --flake "$NIX_CONFIG"
-	elif command -v darwin-rebuild; then
-		sudo scutil --set LocalHostName "UCLAMac"
-		sudo nixos-rebuild switch --flake "$NIX_CONFIG"
-	else
-		error "No rebuild command available!"
-		exit 1
-	fi	
 }
 
 readonly PLIB_FUNCS=(
