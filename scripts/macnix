@@ -14,6 +14,6 @@ curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix 
 
 cd dotfiles/
 
-sudo -i nix run nix-darwin --extra-experimental-features nix-command --extra-experimental-features flakes -- switch --flake . --show-trace
+sudo -i nix run nix-darwin/master#darwin-rebuild -- switch
 
 echo Use to upgrade: darwin-rebuild switch --flake ~/dotfiles/flake.nix
