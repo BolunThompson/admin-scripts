@@ -10,7 +10,7 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs { inherit system; };
-        python = pkgs.python314.withPackages (ppkgs: with ppkgs; [
+        python = pkgs.python311.withPackages (ppkgs: with ppkgs; [
           ansi2html
           weasyprint
         ]);
