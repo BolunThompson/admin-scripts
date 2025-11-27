@@ -9,13 +9,34 @@
   outputs = { self, nixpkgs, flake-utils }:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        pkgs = import nixpkgs { inherit system; };
+        pkgs = import nixpkgs {
+          inherit system;
+          overlays = [
+            (final: prev: {
+              # Fix bitwarden-cli build on macOS - use prebuilt binaries instead of rebuilding
+              bitwarden-cli = prev.bitwarden-cli.overrideAttrs (old: {
+                # Override postConfigure to skip removing prebuilts and npm rebuild
+                # This avoids argon2 compilation issues with libcxx-19.1.7 on macOS
+                postConfigure = final.lib.optionalString (!final.stdenv.isDarwin) (old.postConfigure or "");
+              });
+
+              # Skip tests for Python packages that fail on macOS
+              python311 = prev.python311.override {
+                packageOverrides = pyfinal: pyprev: {
+                  weasyprint = pyprev.weasyprint.overridePythonAttrs (old: {
+                    doCheck = false;
+                  });
+                };
+              };
+            })
+          ];
+        };
         python = pkgs.python311.withPackages (ppkgs: with ppkgs; [
           ansi2html
           weasyprint
         ]);
 
-        # Runtime dependencies that will be added to every wrapped script’s PATH
+        # Runtime dependencies that will be added to every wrapped script's PATH
         runtimePkgs = with pkgs; [
           coreutils
           bash
