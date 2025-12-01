@@ -108,10 +108,10 @@ is_online() {
 
 rebuild() {
 	if command -v nixos-rebuild >/dev/null 2>&1; then
-		sudo nixos-rebuild switch --flake "~/config"
+		sudo nixos-rebuild switch --flake "$HOME/dotfiles"
 	elif command -v darwin-rebuild >/dev/null 2>&1; then
 		sudo scutil --set LocalHostName "UCLAMac"
-		darwin-rebuild switch --flake "~/config"
+		sudo -i darwin-rebuild switch --flake "$HOME/dotfiles"
 	else
 		error "No rebuild command available!"
 		exit 1
@@ -125,7 +125,7 @@ passphrase() {
 
 update_dot() {
 	assert_argc 1 "$@"
-	cd "~/config" || return
+	cd "$HOME/dotfiles" || return
 	local MSG="$1"
 	shift
 	if [[ $# -gt 0 ]]; then
@@ -147,7 +147,7 @@ update_scripts() {
 		git commit -m "$1" || true
 		git push
 	fi
-	cd "~/config" || return
+	cd "$HOME/dotfiles" || return
 	sudo nix flake update
 	sudo git add flake.lock
 	sudo git commit -m "Update flake.lock"
