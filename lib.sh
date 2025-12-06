@@ -112,6 +112,8 @@ rebuild() {
 	elif command -v darwin-rebuild >/dev/null 2>&1; then
 		sudo scutil --set LocalHostName "UCLAMac"
 		sudo -i darwin-rebuild switch --flake "$HOME/dotfiles"
+	elif command -v home-manager >/dev/null 2>&1; then
+		home-manager switch --flake "$HOME/dotfiles" -b backup
 	else
 		error "No rebuild command available!"
 		exit 1
