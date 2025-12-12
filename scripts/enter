@@ -1,0 +1,3 @@
+#!/bin/sh
+
+exec distrobox enter bolun-dev -- bash -lc 'zellij attach -c main'
