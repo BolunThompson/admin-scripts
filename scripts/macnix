@@ -4,16 +4,14 @@ set -euo pipefail
 
 sudo scutil --set LocalHostName "UCLAMac"
 
-PAT="$1"
-
 xcode-select --install || true
 
-git clone "https://BolunThompson@$PAT:github.com/BolunThompson/dotfiles.git"
+git clone "https://BolunThompson@github.com/BolunThompson/dotfiles.git"
 
 curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install --no-confirm
 
 cd dotfiles/
 
-sudo -i nix run nix-darwin/master#darwin-rebuild -- switch
+sudo -i nix run nix-darwin/master#darwin-rebuild -- switch --flake ~/dotfiles/flake.nix
 
 echo Use to upgrade: darwin-rebuild switch --flake ~/dotfiles/flake.nix
