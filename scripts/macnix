@@ -12,6 +12,7 @@ curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix 
 
 cd dotfiles/
 
+sudo /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 sudo -i nix run nix-darwin/master#darwin-rebuild -- switch --flake ~/dotfiles/flake.nix
 
 echo Use to upgrade: darwin-rebuild switch --flake ~/dotfiles/flake.nix
