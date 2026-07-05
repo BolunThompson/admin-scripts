@@ -56,6 +56,14 @@ ensure_root() {
 	printf "%s" "$password" | tee >(sudo -p "" -Sv)
 }
 
+as_root() {
+	if [[ ${EUID:-$(id -u)} -eq 0 ]]; then
+		"$@"
+	else
+		sudo -i "$@"
+	fi
+}
+
 assert_argc() {
 	local argc="$1"
 	shift
@@ -107,17 +115,19 @@ is_online() {
 } >&2
 
 rebuild() {
+	local flake_path="${1:-$HOME/dotfiles}"
+
 	if command -v nixos-rebuild >/dev/null 2>&1; then
-		sudo nixos-rebuild switch --flake "$HOME/dotfiles"
+		as_root nixos-rebuild switch --flake "$flake_path"
 	elif command -v darwin-rebuild >/dev/null 2>&1; then
-		sudo scutil --set LocalHostName "UCLAMac"
-		sudo -i darwin-rebuild switch --flake "$HOME/dotfiles"
+		as_root scutil --set LocalHostName "UCLAMac"
+		as_root darwin-rebuild switch --flake "$flake_path"
 	elif command -v home-manager >/dev/null 2>&1; then
-		home-manager switch --flake "$HOME/dotfiles" -b backup
+		home-manager switch --flake "$flake_path" -b backup
 	else
 		error "No rebuild command available!"
 		exit 1
-	fi	
+	fi
 }
 
 # factored out in case I switch password managers
