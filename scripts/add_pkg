@@ -3,14 +3,15 @@
 . lib.sh
 
 main() {
-	sudo ed -sq "$HOME/dotfiles/home.nix" >/dev/null <<- EOF
+	local home="$HOME/dotfiles/home.nix"
+	as_owner "$home" ed -sq "$home" >/dev/null <<- EOF
 	/END PACKAGES/
 	-a
 	$@
 	.
 	wq
 	EOF
-	update_dot "Add package $* to home.nix" "$HOME/dotfiles/home.nix"
+	update_dot "Add package $* to home.nix" "$home"
 }
 
 main "$@"

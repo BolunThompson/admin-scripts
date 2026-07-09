@@ -141,14 +141,14 @@ update_dot() {
 	local MSG="$1"
 	shift
 	if [[ $# -gt 0 ]]; then
-		sudo nixpkgs-fmt "$@" >/dev/null 2>&1
-		sudo git add "$@"
+		nixpkgs-fmt "$@" >/dev/null 2>&1
+		git add "$@"
 	else
-		sudo nixpkgs-fmt ./*.nix >/dev/null 2>&1
-		sudo git add --all
+		nixpkgs-fmt ./*.nix >/dev/null 2>&1
+		git add --all
 	fi
-	sudo git commit -m "$MSG" || true
-	sudo git push
+	git commit -m "$MSG" || true
+	git push
 	rebuild
 }
 
@@ -160,10 +160,10 @@ update_scripts() {
 		git push
 	fi
 	cd "$HOME/dotfiles" || return
-	sudo nix flake update
-	sudo git add flake.lock
-	sudo git commit -m "Update flake.lock"
-	sudo git push
+	nix flake update
+	git add flake.lock
+	git commit -m "Update flake.lock"
+	git push
 	rebuild
 }
 
@@ -181,6 +181,17 @@ ssh_poweroff() {
 	else
 		poweroff
 	fi
+}
+as_owner() {
+    local f="$1"; shift
+    local u g
+    u="$(stat -c %u -- "$f")"
+    g="$(stat -c %g -- "$f")"
+    if [ "$u" = "$(id -u)" ]; then
+        "$@"
+    else
+        sudo -u "#$u" -g "#$g" env PATH="$PATH" -- "$@"
+    fi
 }
 
 readonly PLIB_FUNCS=(
