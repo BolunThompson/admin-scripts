@@ -154,7 +154,7 @@ update_dot() {
 
 update_scripts() {
 	if [[ -v 1 ]]; then
-		cd ~/scripts || return
+		cd ~/admin-scripts || return
 		git add --all
 		git commit -m "$1" || true
 		git push
