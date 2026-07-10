@@ -3,15 +3,16 @@ set -euo pipefail
 
 usage() {
   cat >&2 <<'EOF'
-usage: git repatch <base-commit>
+usage: git repatch [--no-edit-message] <base-commit>
 
 Replays every commit in <base-commit>..HEAD, dropping you into `git add -p`
 on that commit's own diff. Stage the hunks you want the commit to keep --
 press `e` to hand-edit a hunk. Anything you leave unstaged is dropped from
-the commit.
+the commit. Before each commit is recreated, its message is opened in your
+editor. Pass --no-edit-message to reuse every message without editing it.
 
-The original message, author, and author date are preserved. A commit whose
-hunks you drop entirely becomes an empty commit rather than disappearing.
+The original author and author date are preserved. A commit whose hunks you
+drop entirely becomes an empty commit rather than disappearing.
 
 Bail out at any point with `git rebase --abort`.
 EOF
@@ -20,6 +21,8 @@ EOF
 
 # ---- per-commit step, invoked by `git rebase -x` ---------------------------
 step() {
+  local edit_message=$1
+
   # rebase normally hands us the terminal, but be defensive about stdin.
   if [ ! -t 0 ] && (exec 3</dev/tty) 2>/dev/null; then
     exec </dev/tty
@@ -58,22 +61,45 @@ step() {
     fi
   done
 
-  git commit -q --no-verify --allow-empty -C "$orig"
+  local commit_args=(-q --no-verify --allow-empty -C "$orig")
+  if [ "$edit_message" = true ]; then
+    commit_args+=(--edit)
+  fi
+  git commit "${commit_args[@]}"
   git reset -q --hard # discard the hunks we didn't keep
 }
 
 # ---- entry point ----------------------------------------------------------
 if [ "${1-}" = "--step" ]; then
-  step
+  shift
+  edit_message=true
+  if [ "${1-}" = "--no-edit-message" ]; then
+    edit_message=false
+    shift
+  fi
+  [ $# -eq 0 ] || usage
+  step "$edit_message"
   exit 0
 fi
 
-[ $# -eq 1 ] || usage
-case "$1" in -h | --help) usage ;; esac
+edit_message=true
+base=
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) usage ;;
+    --no-edit-message) edit_message=false ;;
+    -*) usage ;;
+    *)
+      [ -z "$base" ] || usage
+      base=$arg
+      ;;
+  esac
+done
+[ -n "$base" ] || usage
 
-git rev-parse --verify -q "$1^{commit}" >/dev/null ||
+git rev-parse --verify -q "$base^{commit}" >/dev/null ||
   {
-    echo "git-repatch: not a commit: $1" >&2
+    echo "git-repatch: not a commit: $base" >&2
     exit 1
   }
 
@@ -81,4 +107,9 @@ self=$(command -v -- "$0" || true)
 [ -n "$self" ] || self=$0
 case "$self" in /*) ;; *) self="$PWD/$self" ;; esac
 
-exec git rebase --exec "$(printf '%q --step' "$self")" "$1"
+step_command=$(printf '%q --step' "$self")
+if [ "$edit_message" = false ]; then
+  step_command+=' --no-edit-message'
+fi
+
+exec git rebase --exec "$step_command" "$base"
