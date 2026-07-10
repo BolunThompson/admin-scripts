@@ -9,6 +9,8 @@ fi
 
 readonly SCRIPTS_LIB_INCLUDED=yes
 
+trap 'echo; exit' INT
+
 if [[ -t 1 ]]; then
 	ERR_C='\e[0;31m'
 	WRN_C='\e[0;33m'
