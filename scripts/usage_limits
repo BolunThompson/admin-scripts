@@ -1,0 +1,169 @@
+#!/usr/bin/env python3
+"""Print 5-hour and weekly usage limits for claude, claude-work, and codex, in Pacific time."""
+
+import json
+import re
+import subprocess
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+
+PACIFIC = ZoneInfo("America/Los_Angeles")
+
+
+def to_pacific(dt_utc):
+    return dt_utc.astimezone(PACIFIC).strftime("%a %b %d %I:%M%p %Z").replace(" 0", " ")
+
+
+def parse_claude_reset(text, now_utc):
+    m = re.match(r"(\w{3}) (\d{1,2}), (\d{1,2})(?::(\d{2}))?(am|pm)", text.strip())
+    if not m:
+        return None
+    mon, day, hour, minute, ampm = m.groups()
+    hour = int(hour)
+    if ampm == "pm" and hour != 12:
+        hour += 12
+    if ampm == "am" and hour == 12:
+        hour = 0
+    dt = datetime.strptime(
+        f"{mon} {day} {now_utc.year} {hour:02d}:{minute or '00'}", "%b %d %Y %H:%M"
+    ).replace(tzinfo=timezone.utc)
+    if dt < now_utc - timedelta(days=3):
+        dt = dt.replace(year=now_utc.year + 1)
+    return dt
+
+
+def get_claude_usage(config_dir):
+    now_utc = datetime.now(timezone.utc)
+    try:
+        out = subprocess.run(
+            ["claude", "-p", "/usage", "--output-format", "json"],
+            env={"CLAUDE_CONFIG_DIR": config_dir, "PATH": __import__("os").environ["PATH"]},
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        data = json.loads(out.stdout)
+        text = data["result"]
+    except Exception as e:
+        return {"error": str(e)}
+
+    result = {}
+    session_m = re.search(r"Current session: (\d+)% used(?: · resets (.+?) \(UTC\))?", text)
+    week_m = re.search(r"Current week \(all models\): (\d+)% used(?: · resets (.+?) \(UTC\))?", text)
+    if session_m:
+        pct = int(session_m.group(1))
+        reset = parse_claude_reset(session_m.group(2), now_utc) if session_m.group(2) else None
+        result["5h"] = (pct, reset)
+    if week_m:
+        pct = int(week_m.group(1))
+        reset = parse_claude_reset(week_m.group(2), now_utc) if week_m.group(2) else None
+        result["week"] = (pct, reset)
+    return result
+
+
+def get_codex_usage():
+    import os
+
+    proc = subprocess.Popen(
+        ["codex", "app-server", "--stdio"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        bufsize=1,
+        env=os.environ,
+    )
+    try:
+        def send(obj):
+            proc.stdin.write(json.dumps(obj) + "\n")
+            proc.stdin.flush()
+
+        send(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {"clientInfo": {"name": "usage-limits-script", "version": "1.0"}},
+            }
+        )
+        send({"jsonrpc": "2.0", "id": 2, "method": "account/rateLimits/read", "params": None})
+
+        rate_limits = None
+        for _ in range(20):
+            line = proc.stdout.readline()
+            if not line:
+                break
+            try:
+                obj = json.loads(line)
+            except Exception:
+                continue
+            if obj.get("id") == 2 and "result" in obj:
+                rate_limits = obj["result"]["rateLimits"]
+                break
+            if obj.get("id") == 2 and "error" in obj:
+                return {"error": obj["error"].get("message", "unknown error")}
+        if rate_limits is None:
+            return {"error": "no response from codex app-server"}
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        proc.terminate()
+
+    def window_label(win):
+        if not win:
+            return None
+        mins = win.get("windowDurationMins")
+        if mins and mins >= 1440:
+            return f"{round(mins / 1440)}d"
+        if mins:
+            return f"{round(mins / 60)}h"
+        return "?"
+
+    result = {}
+    for key in ("primary", "secondary"):
+        win = rate_limits.get(key)
+        if not win:
+            continue
+        label = window_label(win)
+        pct = win["usedPercent"]
+        resets_at = win.get("resetsAt")
+        reset_dt = (
+            datetime.fromtimestamp(resets_at, tz=timezone.utc) if resets_at else None
+        )
+        result[label] = (pct, reset_dt)
+    return result
+
+
+def fmt_reset(reset_dt):
+    if reset_dt is None:
+        return "n/a"
+    return to_pacific(reset_dt)
+
+
+def fmt_line(name, usage):
+    if "error" in usage:
+        return f"  {name:<12} error: {usage['error']}"
+    parts = []
+    for key, label in (("5h", "5h"), ("week", "week"), ("7d", "week")):
+        if key in usage:
+            pct, reset = usage[key]
+            parts.append(f"{label:<4}: {pct:>3}% (resets {fmt_reset(reset)})")
+    return f"  {name:<12} " + "  ".join(parts)
+
+
+def main():
+    now_pacific = datetime.now(timezone.utc).astimezone(PACIFIC).strftime("%Y-%m-%d %I:%M%p %Z")
+    print(f"Usage limits (as of {now_pacific})\n")
+
+    claude_usage = get_claude_usage("/home/bolun/.claude")
+    claude_work_usage = get_claude_usage("/home/bolun/.claude-work")
+    codex_usage = get_codex_usage()
+
+    print(fmt_line("claude", claude_usage))
+    print(fmt_line("claude-work", claude_work_usage))
+    print(fmt_line("codex", codex_usage))
+
+
+if __name__ == "__main__":
+    main()
