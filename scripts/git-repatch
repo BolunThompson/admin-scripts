@@ -3,13 +3,18 @@ set -euo pipefail
 
 usage() {
   cat >&2 <<'EOF'
-usage: git repatch [--no-edit-message] <base-commit>
+usage: git repatch [--no-edit-message] <base-commit> [-- <pathspec>...]
 
 Replays every commit in <base-commit>..HEAD, dropping you into `git add -p`
 on that commit's own diff. Stage the hunks you want the commit to keep --
 press `e` to hand-edit a hunk. Anything you leave unstaged is dropped from
 the commit. Before each commit is recreated, its message is opened in your
 editor. Pass --no-edit-message to reuse every message without editing it.
+
+With a trailing `-- <pathspec>`, only files matching the pathspec go through
+`git add -p`; every other change in the commit is kept exactly as rebased,
+with no patch menu. Pathspecs are the usual git kind, so exclusions work,
+e.g. `git repatch <base> -- ':!*.md'` reviews everything except Markdown.
 
 The original author and author date are preserved. A commit whose hunks you
 drop entirely becomes an empty commit rather than disappearing.
@@ -22,6 +27,9 @@ EOF
 # ---- per-commit step, invoked by `git rebase -x` ---------------------------
 step() {
   local edit_message=$1
+  shift
+  # Remaining args are the pathspec to restrict `add -p` to (may be empty).
+  local pathspec=("$@")
 
   # rebase normally hands us the terminal, but be defensive about stdin.
   if [ ! -t 0 ] && (exec 3</dev/tty) 2>/dev/null; then
@@ -40,16 +48,27 @@ step() {
   git --no-pager log -1 --format='=== %h %s' "$orig" >&2
 
   # Files this commit creates become untracked after the reset below, so
-  # `add -p` would never show them. Intent-to-add makes them visible.
+  # `add -p` would never show them. Intent-to-add makes them visible. When a
+  # pathspec is given we only care about the added files it matches, since the
+  # rest are staged wholesale.
   local added=()
-  mapfile -t added < <(git diff --name-only --no-renames --diff-filter=A "$parent" "$orig")
+  mapfile -t added < <(git diff --name-only --no-renames --diff-filter=A "$parent" "$orig" -- "${pathspec[@]}")
 
   git reset -q "$parent"
-  if [ ${#added[@]} -gt 0 ]; then
-    git add -N -- "${added[@]}"
+
+  # With a pathspec, stage the whole commit up front and then unstage only the
+  # matched paths, so the unmatched changes are kept verbatim while just the
+  # matched ones are offered to `add -p`.
+  if [ ${#pathspec[@]} -gt 0 ]; then
+    git add -A -f
+    git reset -q -- "${pathspec[@]}"
   fi
 
-  git add -p || true
+  if [ ${#added[@]} -gt 0 ]; then
+    git add -f -N -- "${added[@]}"
+  fi
+
+  git add -f -p -- "${pathspec[@]}" || true
 
   # An intent-to-add path with nothing staged was declined. Unregister and
   # delete it; otherwise it lingers as an untracked file and blocks any
@@ -77,23 +96,32 @@ if [ "${1-}" = "--step" ]; then
     edit_message=false
     shift
   fi
-  [ $# -eq 0 ] || usage
-  step "$edit_message"
+  if [ "${1-}" = "--" ]; then
+    shift
+  fi
+  step "$edit_message" "$@"
   exit 0
 fi
 
 edit_message=true
 base=
-for arg in "$@"; do
-  case "$arg" in
+pathspec=()
+while [ $# -gt 0 ]; do
+  case "$1" in
     -h | --help) usage ;;
     --no-edit-message) edit_message=false ;;
+    --)
+      shift
+      pathspec=("$@")
+      break
+      ;;
     -*) usage ;;
     *)
       [ -z "$base" ] || usage
-      base=$arg
+      base=$1
       ;;
   esac
+  shift
 done
 [ -n "$base" ] || usage
 
@@ -110,6 +138,12 @@ case "$self" in /*) ;; *) self="$PWD/$self" ;; esac
 step_command=$(printf '%q --step' "$self")
 if [ "$edit_message" = false ]; then
   step_command+=' --no-edit-message'
+fi
+if [ ${#pathspec[@]} -gt 0 ]; then
+  step_command+=' --'
+  for p in "${pathspec[@]}"; do
+    step_command+=$(printf ' %q' "$p")
+  done
 fi
 
 exec git rebase --exec "$step_command" "$base"
