@@ -15,6 +15,8 @@ With a trailing `-- <pathspec>`, only files matching the pathspec go through
 `git add -p`; every other change in the commit is kept exactly as rebased,
 with no patch menu. Pathspecs are the usual git kind, so exclusions work,
 e.g. `git repatch <base> -- ':!*.md'` reviews everything except Markdown.
+Submodule (gitlink) changes cannot be interactively repatched; selecting one
+stops before that commit is modified so the rebase can be safely aborted.
 
 The original author and author date are preserved. A commit whose hunks you
 drop entirely becomes an empty commit rather than disappearing.
@@ -28,7 +30,12 @@ EOF
 step() {
   local edit_message=$1
   shift
-  # Remaining args are the pathspec to restrict `add -p` to (may be empty).
+  local restricted=false
+  if [ "${1-}" = "--restricted" ]; then
+    restricted=true
+    shift
+  fi
+  # Remaining args are root-relative pathspecs selected for review.
   local pathspec=("$@")
 
   # rebase normally hands us the terminal, but be defensive about stdin.
@@ -36,7 +43,7 @@ step() {
     exec </dev/tty
   fi
 
-  local orig parent f
+  local orig parent f entry
   orig=$(git rev-parse HEAD)
 
   if ! parent=$(git rev-parse -q --verify 'HEAD^'); then
@@ -51,31 +58,61 @@ step() {
   # `add -p` would never show them. Intent-to-add makes them visible. When a
   # pathspec is given we only care about the added files it matches, since the
   # rest are staged wholesale.
-  local added=()
-  mapfile -t added < <(git diff --name-only --no-renames --diff-filter=A "$parent" "$orig" -- "${pathspec[@]}")
+  local added=() added_pathspec=() changed=()
+  if [ "$restricted" = false ] || [ ${#pathspec[@]} -gt 0 ]; then
+    mapfile -d '' added < <(git diff --name-only -z --no-renames --diff-filter=A "$parent" "$orig" -- "${pathspec[@]}")
+  fi
 
-  git reset -q "$parent"
+  # `git add -p` cannot meaningfully stage gitlink changes, and resetting a
+  # submodule checkout behind the user's back could destroy nested work. Fail
+  # before changing the index so the rebase can still be safely aborted.
+  if [ "$restricted" = true ] && [ ${#pathspec[@]} -gt 0 ]; then
+    mapfile -d '' changed < <(git diff --name-only -z --no-renames "$parent" "$orig" -- "${pathspec[@]}")
+    for f in "${changed[@]}"; do
+      entry=$(git ls-tree "$parent" -- ":(top,literal)$f")
+      if [[ $entry = 160000\ * ]]; then
+        echo "git-repatch: pathspec selects submodule change at '$f'; interactive submodule repatching is not supported" >&2
+        return 1
+      fi
+      entry=$(git ls-tree "$orig" -- ":(top,literal)$f")
+      if [[ $entry = 160000\ * ]]; then
+        echo "git-repatch: pathspec selects submodule change at '$f'; interactive submodule repatching is not supported" >&2
+        return 1
+      fi
+    done
+  fi
 
   # With a pathspec, stage the whole commit up front and then unstage only the
   # matched paths, so the unmatched changes are kept verbatim while just the
-  # matched ones are offered to `add -p`.
-  if [ ${#pathspec[@]} -gt 0 ]; then
-    git add -A -f
-    git reset -q -- "${pathspec[@]}"
+  # matched ones are offered to `add -p`. A soft reset preserves the picked
+  # commit's exact index, without accidentally adding unrelated untracked or
+  # ignored files from the worktree.
+  if [ "$restricted" = true ]; then
+    git reset -q --soft "$parent"
+    if [ ${#pathspec[@]} -gt 0 ]; then
+      git reset -q -- "${pathspec[@]}"
+    fi
+  else
+    git reset -q "$parent"
   fi
 
   if [ ${#added[@]} -gt 0 ]; then
-    git add -f -N -- "${added[@]}"
+    for f in "${added[@]}"; do
+      added_pathspec+=(":(top,literal)$f")
+    done
+    git add -f -N -- "${added_pathspec[@]}"
   fi
 
-  git add -f -p -- "${pathspec[@]}" || true
+  if [ "$restricted" = false ] || [ ${#pathspec[@]} -gt 0 ]; then
+    git add -f -p -- "${pathspec[@]}" || true
+  fi
 
   # An intent-to-add path with nothing staged was declined. Unregister and
   # delete it; otherwise it lingers as an untracked file and blocks any
   # later commit that touches the same path.
   for f in "${added[@]}"; do
-    if git diff --cached --quiet -- "$f"; then
-      git rm -q --cached --force -- "$f" >/dev/null 2>&1 || true
+    if git diff --cached --quiet -- ":(top,literal)$f"; then
+      git rm -q --cached --force -- ":(top,literal)$f" >/dev/null 2>&1 || true
       rm -f -- "$f"
     fi
   done
@@ -96,10 +133,19 @@ if [ "${1-}" = "--step" ]; then
     edit_message=false
     shift
   fi
+  restricted=false
+  if [ "${1-}" = "--restricted" ]; then
+    restricted=true
+    shift
+  fi
   if [ "${1-}" = "--" ]; then
     shift
   fi
-  step "$edit_message" "$@"
+  if [ "$restricted" = true ]; then
+    step "$edit_message" --restricted "$@"
+  else
+    step "$edit_message" "$@"
+  fi
   exit 0
 fi
 
@@ -131,6 +177,168 @@ git rev-parse --verify -q "$base^{commit}" >/dev/null ||
     exit 1
   }
 
+# Rebase exec commands run from the worktree root, but Git pathspecs are
+# normally relative to the directory where the user invokes the command.
+# Rewrite each compact pathspec to its equivalent root-relative form now.
+canonicalize_pathspec() {
+  local LC_ALL=C
+  local prefix=$1 spec=$2 body=$2
+  local header='' magic='' rest part joined=''
+  local top=false exclude=false
+  local long_magic=false prefix_count=0 prefix_path='' prefix_len=0
+  local -a normalized=()
+
+  if [ "$spec" = : ]; then
+    body=.
+  elif [[ $spec = ':('* ]]; then
+    long_magic=true
+    local i ch escaped=false close=-1
+    for ((i = 2; i < ${#spec}; i++)); do
+      ch=${spec:i:1}
+      if [ "$escaped" = true ]; then
+        escaped=false
+      elif [[ $ch == \\ ]]; then
+        escaped=true
+      elif [ "$ch" = ')' ]; then
+        close=$i
+        break
+      fi
+    done
+    [ "$close" -ge 0 ] || return 1
+    header=${spec:0:close+1}
+    magic=${spec:2:close-2}
+    body=${spec:close+1}
+    local j token='' magic_escaped=false
+    for ((j = 0; j <= ${#magic}; j++)); do
+      ch=${magic:j:1}
+      if [ "$magic_escaped" = true ]; then
+        token+=$ch
+        magic_escaped=false
+      elif [[ $ch == \\ ]]; then
+        token+=$ch
+        magic_escaped=true
+      elif [ "$ch" = , ] || [ "$j" -eq "${#magic}" ]; then
+        [ "$token" = top ] && top=true
+        [ "$token" = exclude ] && exclude=true
+        token=
+      else
+        token+=$ch
+      fi
+    done
+  elif [[ $spec = :* ]]; then
+    local i=1 ch
+    while [ "$i" -lt "${#spec}" ]; do
+      ch=${spec:i:1}
+      case "$ch" in
+        /) top=true ;;
+        '!' | '^') exclude=true ;;
+        :)
+          i=$((i + 1))
+          break
+          ;;
+        *) break ;;
+      esac
+      i=$((i + 1))
+    done
+    header=${spec:0:i}
+    body=${spec:i}
+  fi
+
+  CANONICAL_EXCLUDE=$exclude
+  if [ "$top" = true ] || [[ $body = /* ]]; then
+    CANONICAL=$spec
+    return 0
+  fi
+
+  # Normalize `.` and `..` components without expanding glob characters.
+  rest=$prefix$body
+  part=$prefix
+  while [ -n "$part" ]; do
+    part=${part#*/}
+    prefix_count=$((prefix_count + 1))
+  done
+  while :; do
+    if [[ $rest = */* ]]; then
+      part=${rest%%/*}
+      rest=${rest#*/}
+    else
+      part=$rest
+      rest=
+    fi
+    case "$part" in
+      '' | .) ;;
+      ..)
+        [ ${#normalized[@]} -gt 0 ] || return 1
+        if [ ${#normalized[@]} -le "$prefix_count" ]; then
+          prefix_count=$((prefix_count - 1))
+        fi
+        unset 'normalized[${#normalized[@]}-1]'
+        ;;
+      *) normalized+=("$part") ;;
+    esac
+    [ -n "$rest" ] || break
+  done
+  if [ ${#normalized[@]} -gt 0 ]; then
+    printf -v joined '%s/' "${normalized[@]}"
+    joined=${joined%/}
+  else
+    joined=.
+  fi
+  if [ "$prefix_count" -gt 0 ]; then
+    printf -v prefix_path '%s/' "${normalized[@]:0:prefix_count}"
+    prefix_path=${prefix_path%/}
+    prefix_len=${#prefix_path}
+    [[ $joined = "$prefix_path/"* ]] && prefix_len=$((prefix_len + 1))
+  fi
+
+  if [ "$long_magic" = true ]; then
+    CANONICAL=${header%)}
+    [ -n "$magic" ] && CANONICAL+=,
+    CANONICAL+="prefix:$prefix_len)$joined"
+  elif [ "$exclude" = true ]; then
+    CANONICAL=":(exclude,prefix:$prefix_len)$joined"
+  else
+    CANONICAL=":(prefix:$prefix_len)$joined"
+  fi
+}
+
+restricted=false
+if [ ${#pathspec[@]} -gt 0 ]; then
+  restricted=true
+  # Let Git reject empty specs, invalid magic, and illegal combinations such
+  # as a lone `:` mixed with another pathspec before rewriting anything.
+  set +e
+  git diff --quiet "$base" HEAD -- "${pathspec[@]}"
+  pathspec_status=$?
+  set -e
+  [ "$pathspec_status" -lt 128 ] || exit "$pathspec_status"
+
+  prefix=$(git rev-parse --show-prefix)
+  toplevel=$(git rev-parse --show-toplevel)
+  all_exclude=true
+  original_pathspec=("${pathspec[@]}")
+  pathspec=()
+  for p in "${original_pathspec[@]}"; do
+    if ! canonicalize_pathspec "$prefix" "$p"; then
+      echo "git-repatch: invalid pathspec outside the worktree: $p" >&2
+      exit 1
+    fi
+    pathspec+=("$CANONICAL")
+    [ "$CANONICAL_EXCLUDE" = true ] || all_exclude=false
+  done
+  if [ "$all_exclude" = true ] && [ -n "$prefix" ]; then
+    pathspec+=(":(top,literal)${prefix%/}")
+  fi
+
+  # Validate magic and matching syntax before starting the rebase. Exit 1 only
+  # means that matching changes exist; exit 128+ indicates an invalid spec.
+  set +e
+  git -C "$toplevel" diff --quiet "$base" HEAD -- "${pathspec[@]}"
+  pathspec_status=$?
+  set -e
+  [ "$pathspec_status" -lt 128 ] || exit "$pathspec_status"
+fi
+
 self=$(command -v -- "$0" || true)
 [ -n "$self" ] || self=$0
 case "$self" in /*) ;; *) self="$PWD/$self" ;; esac
@@ -138,6 +346,9 @@ case "$self" in /*) ;; *) self="$PWD/$self" ;; esac
 step_command=$(printf '%q --step' "$self")
 if [ "$edit_message" = false ]; then
   step_command+=' --no-edit-message'
+fi
+if [ "$restricted" = true ]; then
+  step_command+=' --restricted'
 fi
 if [ ${#pathspec[@]} -gt 0 ]; then
   step_command+=' --'
