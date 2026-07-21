@@ -3,18 +3,23 @@ set -euo pipefail
 
 usage() {
   cat >&2 <<'EOF'
-usage: git repatch [--no-edit-message] <base-commit> [-- <pathspec>...]
+usage: git repatch [--no-edit-message] <base>[..<tip>] [-- <pathspec>...]
 
-Replays every commit in <base-commit>..HEAD, dropping you into `git add -p`
-on that commit's own diff. Stage the hunks you want the commit to keep --
-press `e` to hand-edit a hunk. Anything you leave unstaged is dropped from
-the commit. Before each commit is recreated, its message is opened in your
-editor. Pass --no-edit-message to reuse every message without editing it.
+Replays the commits in <base>..<tip>, dropping you into `git add -p` on each
+commit's own diff. The tip must be on the current branch; later commits are
+replayed without a patch prompt. If no `..` is given, <tip> defaults to HEAD.
+As with Git revision ranges, an omitted endpoint also means HEAD.
+
+Stage the hunks you want the commit to keep -- press `e` to hand-edit a hunk.
+Anything you leave unstaged is dropped from the commit. Before each selected
+commit is recreated, its message is opened in your editor. Pass
+--no-edit-message to reuse every message without editing it.
 
 With a trailing `-- <pathspec>`, only files matching the pathspec go through
 `git add -p`; every other change in the commit is kept exactly as rebased,
 with no patch menu. Pathspecs are the usual git kind, so exclusions work,
-e.g. `git repatch <base> -- ':!*.md'` reviews everything except Markdown.
+e.g. `git repatch <base>..<tip> -- ':!*.md'` reviews everything except
+Markdown.
 Submodule (gitlink) changes cannot be interactively repatched; selecting one
 stops before that commit is modified so the rebase can be safely aborted.
 
@@ -26,7 +31,38 @@ EOF
   exit 129
 }
 
-# ---- per-commit step, invoked by `git rebase -x` ---------------------------
+# Add the per-commit command only after picks that belong to the requested
+# range. The rebase itself continues through HEAD so descendants of <tip> are
+# retained on the current branch.
+sequence_editor() {
+  local tip=$1 step_command=$2 todo=$3 line command rest commit status
+  local tmp
+  tmp=$(mktemp "${todo}.repatch.XXXXXX")
+  trap 'rm -f -- "$tmp"' EXIT
+
+  while IFS= read -r line || [ -n "$line" ]; do
+    printf '%s\n' "$line" >>"$tmp"
+    command=${line%%[[:space:]]*}
+    if [ "$command" = pick ] || [ "$command" = p ]; then
+      rest=${line#*[[:space:]]}
+      commit=${rest%%[[:space:]]*}
+      set +e
+      git merge-base --is-ancestor "$commit" "$tip"
+      status=$?
+      set -e
+      if [ "$status" -eq 0 ]; then
+        printf 'exec %s\n' "$step_command" >>"$tmp"
+      elif [ "$status" -gt 1 ]; then
+        return "$status"
+      fi
+    fi
+  done <"$todo"
+
+  mv -- "$tmp" "$todo"
+  trap - EXIT
+}
+
+# ---- per-commit step, invoked from the rebase todo -------------------------
 step() {
   local edit_message=$1
   shift
@@ -126,6 +162,13 @@ step() {
 }
 
 # ---- entry point ----------------------------------------------------------
+if [ "${1-}" = "--sequence-editor" ]; then
+  shift
+  [ "$#" -eq 3 ] || exit 2
+  sequence_editor "$@"
+  exit 0
+fi
+
 if [ "${1-}" = "--step" ]; then
   shift
   edit_message=true
@@ -151,6 +194,8 @@ fi
 
 edit_message=true
 base=
+tip=
+range=
 pathspec=()
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -163,19 +208,43 @@ while [ $# -gt 0 ]; do
       ;;
     -*) usage ;;
     *)
-      [ -z "$base" ] || usage
-      base=$1
+      [ -z "$range" ] || usage
+      range=$1
       ;;
   esac
   shift
 done
-[ -n "$base" ] || usage
+[ -n "$range" ] || usage
+
+if [[ $range = *...* ]] || [[ ${range#*..} = *..* ]]; then
+  echo "git-repatch: expected a two-dot range: $range" >&2
+  exit 1
+elif [[ $range = *..* ]]; then
+  base=${range%%..*}
+  tip=${range#*..}
+  [ -n "$base" ] || base=HEAD
+  [ -n "$tip" ] || tip=HEAD
+else
+  base=$range
+  tip=HEAD
+fi
 
 git rev-parse --verify -q "$base^{commit}" >/dev/null ||
   {
     echo "git-repatch: not a commit: $base" >&2
     exit 1
   }
+git rev-parse --verify -q "$tip^{commit}" >/dev/null ||
+  {
+    echo "git-repatch: not a commit: $tip" >&2
+    exit 1
+  }
+tip=$(git rev-parse "$tip^{commit}")
+
+if ! git merge-base --is-ancestor "$tip" HEAD; then
+  echo "git-repatch: range tip is not on the current branch: ${range#*..}" >&2
+  exit 1
+fi
 
 # Rebase exec commands run from the worktree root, but Git pathspecs are
 # normally relative to the directory where the user invokes the command.
@@ -308,7 +377,7 @@ if [ ${#pathspec[@]} -gt 0 ]; then
   # Let Git reject empty specs, invalid magic, and illegal combinations such
   # as a lone `:` mixed with another pathspec before rewriting anything.
   set +e
-  git diff --quiet "$base" HEAD -- "${pathspec[@]}"
+  git diff --quiet "$base" "$tip" -- "${pathspec[@]}"
   pathspec_status=$?
   set -e
   [ "$pathspec_status" -lt 128 ] || exit "$pathspec_status"
@@ -333,7 +402,7 @@ if [ ${#pathspec[@]} -gt 0 ]; then
   # Validate magic and matching syntax before starting the rebase. Exit 1 only
   # means that matching changes exist; exit 128+ indicates an invalid spec.
   set +e
-  git -C "$toplevel" diff --quiet "$base" HEAD -- "${pathspec[@]}"
+  git -C "$toplevel" diff --quiet "$base" "$tip" -- "${pathspec[@]}"
   pathspec_status=$?
   set -e
   [ "$pathspec_status" -lt 128 ] || exit "$pathspec_status"
@@ -357,4 +426,5 @@ if [ ${#pathspec[@]} -gt 0 ]; then
   done
 fi
 
-exec git rebase --exec "$step_command" "$base"
+sequence_editor_command=$(printf '%q --sequence-editor %q %q' "$self" "$tip" "$step_command")
+GIT_SEQUENCE_EDITOR=$sequence_editor_command exec git rebase -i "$base"
