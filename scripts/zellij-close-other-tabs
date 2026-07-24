@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+"""Close every Zellij tab except the one containing this command."""
+
+import json
+import os
+import subprocess
+import sys
+
+
+def zellij_json(*args):
+    result = subprocess.run(
+        ["zellij", "action", *args, "--json"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return json.loads(result.stdout)
+
+
+def main():
+    pane_id_text = os.environ.get("ZELLIJ_PANE_ID")
+    if pane_id_text is None:
+        print("zellij-close-other-tabs: not running inside a Zellij pane", file=sys.stderr)
+        return 1
+
+    try:
+        pane_id = int(pane_id_text)
+        panes = zellij_json("list-panes", "--tab")
+        current_panes = [
+            pane
+            for pane in panes
+            if not pane["is_plugin"] and pane["id"] == pane_id
+        ]
+        if len(current_panes) != 1:
+            raise RuntimeError(
+                f"expected one terminal pane with ID {pane_id}, found {len(current_panes)}"
+            )
+
+        current_tab_id = current_panes[0]["tab_id"]
+        tabs = zellij_json("list-tabs")
+        other_tab_ids = [
+            tab["tab_id"] for tab in tabs if tab["tab_id"] != current_tab_id
+        ]
+
+        for tab_id in other_tab_ids:
+            subprocess.run(
+                ["zellij", "action", "close-tab-by-id", str(tab_id)],
+                check=True,
+            )
+    except (json.JSONDecodeError, KeyError, ValueError, RuntimeError) as error:
+        print(f"zellij-close-other-tabs: {error}", file=sys.stderr)
+        return 1
+    except FileNotFoundError:
+        print("zellij-close-other-tabs: zellij is not installed", file=sys.stderr)
+        return 127
+    except subprocess.CalledProcessError as error:
+        print(
+            f"zellij-close-other-tabs: zellij action failed with status {error.returncode}",
+            file=sys.stderr,
+        )
+        if error.stderr:
+            print(error.stderr.rstrip(), file=sys.stderr)
+        return error.returncode
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
