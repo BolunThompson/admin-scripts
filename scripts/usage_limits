@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Print 5-hour and weekly usage limits for claude, claude-work, and codex, in Pacific time."""
 
+import argparse
+import functools
 import json
 import re
 import subprocess
@@ -37,7 +39,10 @@ def get_claude_usage(config_dir):
     try:
         out = subprocess.run(
             ["claude", "-p", "/usage", "--output-format", "json"],
-            env={"CLAUDE_CONFIG_DIR": config_dir, "PATH": __import__("os").environ["PATH"]},
+            env={
+                "CLAUDE_CONFIG_DIR": config_dir,
+                "PATH": __import__("os").environ["PATH"],
+            },
             stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
@@ -49,17 +54,31 @@ def get_claude_usage(config_dir):
         return {"error": str(e)}
 
     result = {}
-    session_m = re.search(r"Current session: (\d+)% used(?: · resets (.+?) \(UTC\))?", text)
-    week_m = re.search(r"Current week \(all models\): (\d+)% used(?: · resets (.+?) \(UTC\))?", text)
+    session_m = re.search(
+        r"Current session: (\d+)% used(?: · resets (.+?) \(UTC\))?", text
+    )
+    week_m = re.search(
+        r"Current week \(all models\): (\d+)% used(?: · resets (.+?) \(UTC\))?", text
+    )
     if session_m:
         pct = int(session_m.group(1))
-        reset = parse_claude_reset(session_m.group(2), now_utc) if session_m.group(2) else None
+        reset = (
+            parse_claude_reset(session_m.group(2), now_utc)
+            if session_m.group(2)
+            else None
+        )
         result["5h"] = (pct, reset)
     if week_m:
         pct = int(week_m.group(1))
-        reset = parse_claude_reset(week_m.group(2), now_utc) if week_m.group(2) else None
+        reset = (
+            parse_claude_reset(week_m.group(2), now_utc) if week_m.group(2) else None
+        )
         result["week"] = (pct, reset)
     return result
+
+
+get_personal_claude_usage = functools.partial(get_claude_usage, "/home/bolun/.claude")
+get_work_claude_usage = functools.partial(get_claude_usage, "/home/bolun/.claude-work")
 
 
 def get_codex_usage():
@@ -75,6 +94,7 @@ def get_codex_usage():
         env=os.environ,
     )
     try:
+
         def send(obj):
             proc.stdin.write(json.dumps(obj) + "\n")
             proc.stdin.flush()
@@ -84,10 +104,19 @@ def get_codex_usage():
                 "jsonrpc": "2.0",
                 "id": 1,
                 "method": "initialize",
-                "params": {"clientInfo": {"name": "usage-limits-script", "version": "1.0"}},
+                "params": {
+                    "clientInfo": {"name": "usage-limits-script", "version": "1.0"}
+                },
             }
         )
-        send({"jsonrpc": "2.0", "id": 2, "method": "account/rateLimits/read", "params": None})
+        send(
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "account/rateLimits/read",
+                "params": None,
+            }
+        )
 
         rate_limits = None
         for _ in range(20):
@@ -153,16 +182,32 @@ def fmt_line(name, usage):
 
 
 def main():
-    now_pacific = datetime.now(timezone.utc).astimezone(PACIFIC).strftime("%Y-%m-%d %I:%M%p %Z")
-    print(f"Usage limits (as of {now_pacific})\n")
+    usages = {
+        "claude": get_personal_claude_usage,
+        "claude-work": get_work_claude_usage,
+        "codex": get_codex_usage,
+    }
 
-    claude_usage = get_claude_usage("/home/bolun/.claude")
-    claude_work_usage = get_claude_usage("/home/bolun/.claude-work")
-    codex_usage = get_codex_usage()
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "type", default=None, choices=usages, nargs="?"
+    )
+    parser.add_argument("daily", default=None, nargs="?")
+    args = parser.parse_args()
 
-    print(fmt_line("claude", claude_usage))
-    print(fmt_line("claude-work", claude_work_usage))
-    print(fmt_line("codex", codex_usage))
+    if args.type is None:
+        now_pacific = (
+            datetime.now(timezone.utc)
+            .astimezone(PACIFIC)
+            .strftime("%Y-%m-%d %I:%M%p %Z")
+        )
+        print(f"Usage limits (as of {now_pacific})\n")
+        for k, v in usages.items():
+            print(fmt_line(k, v()))
+    elif args.daily is None:
+        print(fmt_line(args.type, usages[args.type]()))
+    else:
+        print(usages[args.type]()[args.daily][0])
 
 
 if __name__ == "__main__":
