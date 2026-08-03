@@ -193,7 +193,15 @@ def main():
         "type", default=None, choices=usages, nargs="?"
     )
     parser.add_argument("daily", default=None, nargs="?")
+    parser.add_argument(
+        "--reset",
+        action="store_true",
+        help="print the ISO 8601 reset time instead of the percentage",
+    )
     args = parser.parse_args()
+
+    if args.reset and args.daily is None:
+        parser.error("--reset requires both a type and a window (e.g. claude 5h --reset)")
 
     if args.type is None:
         now_pacific = (
@@ -207,7 +215,11 @@ def main():
     elif args.daily is None:
         print(fmt_line(args.type, usages[args.type]()))
     else:
-        print(usages[args.type]()[args.daily][0])
+        pct, reset = usages[args.type]()[args.daily]
+        if args.reset:
+            print(reset.astimezone(PACIFIC).isoformat() if reset else "n/a")
+        else:
+            print(pct)
 
 
 if __name__ == "__main__":
