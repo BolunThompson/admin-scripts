@@ -159,8 +159,8 @@ update_scripts() {
 		cd ~/admin-scripts || return
 		git add --all
 		git commit -m "$1" || true
-		git push
 	fi
+	git push
 	cd "$HOME/dotfiles" || return
 	nix flake update
 	git add flake.lock
