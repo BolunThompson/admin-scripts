@@ -2,8 +2,10 @@
 """Print 5-hour and weekly usage limits for claude, claude-work, and codex, in Pacific time."""
 
 import argparse
+import asyncio
 import functools
 import json
+import os
 import re
 import subprocess
 from datetime import datetime, timedelta, timezone
@@ -34,21 +36,26 @@ def parse_claude_reset(text, now_utc):
     return dt
 
 
-def get_claude_usage(config_dir):
+async def get_claude_usage(config_dir):
     now_utc = datetime.now(timezone.utc)
     try:
-        out = subprocess.run(
-            ["claude", "-p", "/usage", "--output-format", "json"],
+        proc = await asyncio.create_subprocess_exec(
+            "claude",
+            "-p",
+            "/usage",
+            "--output-format",
+            "json",
             env={
                 "CLAUDE_CONFIG_DIR": config_dir,
-                "PATH": __import__("os").environ["PATH"],
+                "PATH": os.environ["PATH"],
             },
             stdin=subprocess.DEVNULL,
-            capture_output=True,
-            text=True,
-            timeout=30,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
         )
-        data = json.loads(out.stdout)
+        stdout, _ = await proc.communicate()
+
+        data = json.loads(stdout)
         text = data["result"]
     except Exception as e:
         return {"error": str(e)}
@@ -81,25 +88,25 @@ get_personal_claude_usage = functools.partial(get_claude_usage, "/home/bolun/.cl
 get_work_claude_usage = functools.partial(get_claude_usage, "/home/bolun/.claude-work")
 
 
-def get_codex_usage():
-    import os
+async def get_codex_usage():
 
-    proc = subprocess.Popen(
-        ["codex", "app-server", "--stdio"],
+    proc = await asyncio.create_subprocess_exec(
+        "codex",
+        "app-server",
+        "--stdio",
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
-        text=True,
-        bufsize=1,
         env=os.environ,
     )
     try:
 
-        def send(obj):
-            proc.stdin.write(json.dumps(obj) + "\n")
-            proc.stdin.flush()
+        async def send(obj):
+            assert proc.stdin is not None
+            proc.stdin.write(json.dumps(obj).encode() + b"\n")
+            await proc.stdin.drain()
 
-        send(
+        await send(
             {
                 "jsonrpc": "2.0",
                 "id": 1,
@@ -109,7 +116,7 @@ def get_codex_usage():
                 },
             }
         )
-        send(
+        await send(
             {
                 "jsonrpc": "2.0",
                 "id": 2,
@@ -119,8 +126,9 @@ def get_codex_usage():
         )
 
         rate_limits = None
+        assert proc.stdout is not None
         for _ in range(20):
-            line = proc.stdout.readline()
+            line = await proc.stdout.readline()
             if not line:
                 break
             try:
@@ -181,17 +189,15 @@ def fmt_line(name, usage):
     return f"  {name:<12} " + "  ".join(parts)
 
 
-def main():
+async def main():
     usages = {
-        "claude": get_personal_claude_usage,
-        "claude-work": get_work_claude_usage,
-        "codex": get_codex_usage,
+        "claude": get_personal_claude_usage(),
+        "claude-work": get_work_claude_usage(),
+        "codex": get_codex_usage(),
     }
 
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "type", default=None, choices=usages, nargs="?"
-    )
+    parser.add_argument("type", default=None, choices=usages, nargs="?")
     parser.add_argument("daily", default=None, nargs="?")
     parser.add_argument(
         "--reset",
@@ -201,7 +207,9 @@ def main():
     args = parser.parse_args()
 
     if args.reset and args.daily is None:
-        parser.error("--reset requires both a type and a window (e.g. claude 5h --reset)")
+        parser.error(
+            "--reset requires both a type and a window (e.g. claude 5h --reset)"
+        )
 
     if args.type is None:
         now_pacific = (
@@ -210,12 +218,13 @@ def main():
             .strftime("%Y-%m-%d %I:%M%p %Z")
         )
         print(f"Usage limits (as of {now_pacific})\n")
-        for k, v in usages.items():
-            print(fmt_line(k, v()))
+        tasks = [asyncio.create_task(task) for task in usages.values()]
+        for k, usage in zip(usages, asyncio.as_completed(tasks)):
+            print(fmt_line(k, await usage))
     elif args.daily is None:
-        print(fmt_line(args.type, usages[args.type]()))
+        print(fmt_line(args.type, await usages[args.type]))
     else:
-        pct, reset = usages[args.type]()[args.daily]
+        pct, reset = (await usages[args.type])[args.daily]
         if args.reset:
             print(reset.astimezone(PACIFIC).isoformat() if reset else "n/a")
         else:
@@ -223,4 +232,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
