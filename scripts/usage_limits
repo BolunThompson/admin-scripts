@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Print 5-hour and weekly usage limits for claude, claude-work, and codex, in Pacific time."""
+"""Print Claude and Codex usage limits in Pacific time."""
 
 import argparse
 import asyncio
@@ -9,6 +9,7 @@ import os
 import re
 import subprocess
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 PACIFIC = ZoneInfo("America/Los_Angeles")
@@ -46,7 +47,7 @@ async def get_claude_usage(config_dir):
             "--output-format",
             "json",
             env={
-                "CLAUDE_CONFIG_DIR": config_dir,
+                "CLAUDE_CONFIG_DIR": str(config_dir),
                 "PATH": os.environ["PATH"],
             },
             stdin=subprocess.DEVNULL,
@@ -84,21 +85,28 @@ async def get_claude_usage(config_dir):
     return result
 
 
-get_personal_claude_usage = functools.partial(get_claude_usage, "/home/bolun/.claude")
-get_work_claude_usage = functools.partial(get_claude_usage, "/home/bolun/.claude-work")
+get_personal_claude_usage = functools.partial(get_claude_usage, Path.home() / ".claude")
+get_work_claude_usage = functools.partial(get_claude_usage, Path.home() / ".claude-work")
 
 
-async def get_codex_usage():
-
-    proc = await asyncio.create_subprocess_exec(
-        "codex",
-        "app-server",
-        "--stdio",
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-        env=os.environ,
-    )
+async def get_codex_usage(config_dir):
+    env = os.environ.copy()
+    env["CODEX_HOME"] = str(config_dir)
+    # The bare `codex` command may itself be a profile wrapper that resets
+    # CODEX_HOME. Use the configured real binary when available.
+    codex_bin = env.get("UNSNOOZE_CODEX_BIN", "codex")
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            codex_bin,
+            "app-server",
+            "--stdio",
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            env=env,
+        )
+    except Exception as e:
+        return {"error": str(e)}
     try:
 
         async def send(obj):
@@ -116,6 +124,7 @@ async def get_codex_usage():
                 },
             }
         )
+        await send({"jsonrpc": "2.0", "method": "initialized", "params": {}})
         await send(
             {
                 "jsonrpc": "2.0",
@@ -128,7 +137,7 @@ async def get_codex_usage():
         rate_limits = None
         assert proc.stdout is not None
         for _ in range(20):
-            line = await proc.stdout.readline()
+            line = await asyncio.wait_for(proc.stdout.readline(), timeout=5)
             if not line:
                 break
             try:
@@ -145,7 +154,9 @@ async def get_codex_usage():
     except Exception as e:
         return {"error": str(e)}
     finally:
-        proc.terminate()
+        if proc.returncode is None:
+            proc.terminate()
+            await proc.wait()
 
     def window_label(win):
         if not win:
@@ -172,6 +183,12 @@ async def get_codex_usage():
     return result
 
 
+get_personal_codex_usage = functools.partial(
+    get_codex_usage, Path.home() / ".codex"
+)
+get_work_codex_usage = functools.partial(get_codex_usage, Path.home() / ".codex-work")
+
+
 def fmt_reset(reset_dt):
     if reset_dt is None:
         return "n/a"
@@ -185,20 +202,21 @@ def fmt_line(name, usage):
     for key, label in (("5h", "5h"), ("week", "week"), ("7d", "week")):
         if key in usage:
             pct, reset = usage[key]
-            parts.append(f"{label:<4}: {pct:>3}% (resets {fmt_reset(reset)})")
+            parts.append(f"{label:<4}: {pct:>3g}% (resets {fmt_reset(reset)})")
     return f"  {name:<12} " + "  ".join(parts)
 
 
 async def main():
-    usages = {
-        "claude": get_personal_claude_usage(),
-        "claude-work": get_work_claude_usage(),
-        "codex": get_codex_usage(),
+    usage_getters = {
+        "claude": get_personal_claude_usage,
+        "claude-work": get_work_claude_usage,
+        "codex": get_personal_codex_usage,
+        "codex-work": get_work_codex_usage,
     }
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("type", default=None, choices=usages, nargs="?")
-    parser.add_argument("daily", default=None, nargs="?")
+    parser.add_argument("type", default=None, choices=usage_getters, nargs="?")
+    parser.add_argument("window", choices=("5h", "week", "7d"), nargs="?")
     parser.add_argument(
         "--reset",
         action="store_true",
@@ -206,7 +224,7 @@ async def main():
     )
     args = parser.parse_args()
 
-    if args.reset and args.daily is None:
+    if args.reset and args.window is None:
         parser.error(
             "--reset requires both a type and a window (e.g. claude 5h --reset)"
         )
@@ -218,13 +236,21 @@ async def main():
             .strftime("%Y-%m-%d %I:%M%p %Z")
         )
         print(f"Usage limits (as of {now_pacific})\n")
-        tasks = [asyncio.create_task(task) for task in usages.values()]
-        for k, usage in zip(usages, asyncio.as_completed(tasks)):
-            print(fmt_line(k, await usage))
-    elif args.daily is None:
-        print(fmt_line(args.type, await usages[args.type]))
+        names = list(usage_getters)
+        results = await asyncio.gather(*(usage_getters[name]() for name in names))
+        for name, usage in zip(names, results):
+            print(fmt_line(name, usage))
     else:
-        pct, reset = (await usages[args.type])[args.daily]
+        usage = await usage_getters[args.type]()
+        if args.window is None:
+            print(fmt_line(args.type, usage))
+            return
+        if "error" in usage:
+            parser.error(f"{args.type}: {usage['error']}")
+        window = "7d" if args.window == "week" and "7d" in usage else args.window
+        if window not in usage:
+            parser.error(f"{args.type} has no {args.window} usage window")
+        pct, reset = usage[window]
         if args.reset:
             print(reset.astimezone(PACIFIC).isoformat() if reset else "n/a")
         else:
