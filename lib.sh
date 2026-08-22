@@ -122,7 +122,6 @@ rebuild() {
 	if command -v nixos-rebuild >/dev/null 2>&1; then
 		as_root nixos-rebuild switch --flake "$flake_path"
 	elif command -v darwin-rebuild >/dev/null 2>&1; then
-		as_root scutil --set LocalHostName "UCLAMac"
 		as_root darwin-rebuild switch --flake "$flake_path"
 	elif command -v home-manager >/dev/null 2>&1; then
 		home-manager switch --flake "$flake_path" -b backup
@@ -196,6 +195,51 @@ as_owner() {
     fi
 }
 
+
+# Overridable from the environment if the model lineup changes.
+: "${ASK_MODEL:=gpt-5.6-luna}"
+: "${ASK_REASONING_EFFORT:=low}"
+
+# Quick one-shot programming question, answered by codex non-interactively.
+# Low reasoning effort on purpose: this is for things you'd otherwise google,
+# not for anything that needs to read the repo or change files.
+ask() {
+	if ! [[ -v 1 ]]; then
+		error "usage: ask <question>"
+		return 1
+	fi
+	if ! command -v codex >/dev/null 2>&1; then
+		error "codex is not on PATH"
+		return 1
+	fi
+
+	local prompt
+	prompt=$(
+		cat <<-EOF
+			You are answering a quick programming question from an experienced
+			developer at their terminal. Answer directly and concisely.
+
+			Rules:
+			- Lead with the answer. No preamble, no restating the question.
+			- Code snippets only where they are the clearest answer. No boilerplate.
+			- If the answer is a command or one-liner, just give it.
+			- Assume competence: skip basics, caveats, and safety warnings.
+			- If the question is genuinely ambiguous, state the most likely
+			  reading and answer that rather than asking to clarify.
+			- Keep it under ~10 lines unless the question truly needs more.
+
+			Question: $*
+		EOF
+	)
+
+	codex exec \
+		--model "$ASK_MODEL" \
+		--config "model_reasoning_effort=\"$ASK_REASONING_EFFORT\"" \
+		--sandbox read-only \
+		--skip-git-repo-check \
+		-- "$prompt"
+}
+
 readonly PLIB_FUNCS=(
 	"private_ip"
 	"public_ip"
@@ -206,5 +250,6 @@ readonly PLIB_FUNCS=(
 	"passphrase"
 	"is_online"
 	"rebuild"
+	"ask"
 )
 export PLIB_FUNCS
