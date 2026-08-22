@@ -1,35 +1,126 @@
-#!/usr/bin/env python3
+#!/usr/bin/env bash
 
-import argparse
-import subprocess
-from pathlib import Path
+. lib.sh
 
-from ansi2html import Ansi2HTMLConverter
-from weasyprint import HTML, CSS
+# Render a source file to a printable, syntax-highlighted PDF.
+#
+# Previously this was bat -> ansi2html -> weasyprint, which dragged a whole
+# Python stack in and needed a doCheck=false override to build at all on
+# darwin. typst highlights with the same syntect engine bat uses, ships as a
+# single binary, and does page furniture (margins, headers, page numbers) and
+# line numbering natively.
 
+usage() {
+	cat <<-EOF
+		usage: code_to_pdf <input> [-o output.pdf] [-s font-size]
 
-def main():
-    p = argparse.ArgumentParser()
-    p.add_argument("input")
-    p.add_argument("-o", "--output")
-    a = p.parse_args()
+		Renders <input> to a syntax-highlighted PDF with line numbers.
+		Defaults to <input>.pdf and 8pt.
+	EOF
+}
 
-    src = Path(a.input)
-    dst = Path(a.output) if a.output else src.with_suffix(".pdf")
+# typst matches syntect language names; map the extensions whose bare form is
+# not itself one. Anything unmapped is passed through, and an unknown language
+# degrades to unhighlighted text rather than failing.
+lang_for() {
+	case "${1,,}" in
+	rs) echo rust ;;
+	py) echo python ;;
+	js | mjs | cjs) echo javascript ;;
+	ts) echo typescript ;;
+	tsx) echo tsx ;;
+	jsx) echo jsx ;;
+	h | hpp | cc | cxx) echo cpp ;;
+	sh | bash | zsh) echo bash ;;
+	md) echo markdown ;;
+	yml) echo yaml ;;
+	tf) echo hcl ;;
+	rb) echo ruby ;;
+	kt) echo kotlin ;;
+	fish) echo fish ;;
+	nix) echo nix ;;
+	*) echo "$1" ;;
+	esac
+}
 
-    ansi = subprocess.run(
-        ["bat", "--theme=Monokai Extended Light", "--color=always", str(src)],
-        check=True,
-        stdout=subprocess.PIPE,
-        text=True
-    ).stdout
+# Escape a value for embedding in a typst string literal.
+typst_str() {
+	printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
+}
 
-    content = Ansi2HTMLConverter(inline=True).convert(ansi, full=True)
-    content = content.replace("color: #000000;", "color: #ffffff;")
-    content = content.replace("color: #AAAAAA;", "color: #000000;")
+main() {
+	if ! [[ -v 1 ]] || [[ $1 == -h || $1 == --help ]]; then
+		usage
+		return 1
+	fi
 
-    css = CSS(string="@page { margin: 0.10in }")
-    HTML(string=content, base_url=".").write_pdf(str(dst), stylesheets=[css])
+	local src=$1 dst="" size=8
+	shift
+	while [[ $# -gt 0 ]]; do
+		case $1 in
+		-o | --output)
+			dst=$2
+			shift 2
+			;;
+		-s | --size)
+			size=$2
+			shift 2
+			;;
+		*)
+			error "unknown argument: $1"
+			usage
+			return 1
+			;;
+		esac
+	done
 
-if __name__ == "__main__":
-    main()
+	if [[ ! -f $src ]]; then
+		error "no such file: $src"
+		return 1
+	fi
+	if ! command -v typst >/dev/null 2>&1; then
+		error "typst is not on PATH"
+		return 1
+	fi
+
+	[[ -n $dst ]] || dst="${src%.*}.pdf"
+
+	local base ext lang tmp
+	base=$(basename -- "$src")
+	ext="${base##*.}"
+	[[ $ext == "$base" ]] && ext=txt
+	lang=$(lang_for "$ext")
+
+	# typst may only read inside its project root, so stage the source next to
+	# the generated document and reference it by basename.
+	tmp=$(mktemp -d)
+	trap 'rm -rf "$tmp"' RETURN
+	cp -- "$src" "$tmp/$base"
+
+	cat >"$tmp/doc.typ" <<-EOF
+		#set page(
+		  paper: "us-letter",
+		  margin: (x: 0.55in, y: 0.6in),
+		  header: text(size: 7pt, fill: luma(45%))[$(typst_str "$base")],
+		  numbering: "1 / 1",
+		)
+		#set text(size: ${size}pt)
+		#show raw: set text(font: "DejaVu Sans Mono", size: ${size}pt)
+		#show raw.line: it => {
+		  box(width: 2.4em, align(right, text(fill: luma(60%), str(it.number))))
+		  h(0.7em)
+		  it.body
+		}
+		#raw(read("$(typst_str "$base")"), lang: "$lang", block: true)
+	EOF
+
+	if ! typst compile --root "$tmp" "$tmp/doc.typ" "$tmp/doc.pdf" 2>&1; then
+		error "typst failed to render $src"
+		return 1
+	fi
+
+	cp -- "$tmp/doc.pdf" "$dst"
+	success "wrote $dst"
+}
+
+main "$@"

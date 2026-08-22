@@ -2,8 +2,12 @@
   description = "admin-scripts";
 
   inputs = {
-    nixpkgs.url     = "github:NixOS/nixpkgs/nixos-unstable";
-    flake-utils.url = "github:numtide/flake-utils";
+    # FlakeHub's weekly nixpkgs snapshot rather than a rolling unstable branch:
+    # it is a fully-built, fully-cached cut, and it is what the bare `nixpkgs#`
+    # registry alias resolves to on these machines, so ad-hoc `nix build
+    # nixpkgs#foo` checks agree with what this flake actually builds.
+    nixpkgs.url      = "https://flakehub.com/f/DeterminateSystems/nixpkgs-weekly/*.tar.gz";
+    flake-utils.url  = "github:numtide/flake-utils";
   };
 
   outputs = { self, nixpkgs, flake-utils }:
@@ -11,32 +15,11 @@
       let
         pkgs = import nixpkgs {
           inherit system;
-          overlays = [
-            (final: prev: {
-              # Fix bitwarden-cli build on macOS - use prebuilt binaries instead of rebuilding
-              bitwarden-cli = prev.bitwarden-cli.overrideAttrs (old: {
-                # Override postConfigure to skip removing prebuilts and npm rebuild
-                # This avoids argon2 compilation issues with libcxx-19.1.7 on macOS
-                postConfigure = final.lib.optionalString (!final.stdenv.hostPlatform.isDarwin) (old.postConfigure or "");
-              });
-
-              # Skip tests for Python packages that fail on macOS.
-              # Load-bearing: weasyprint 65.1 (this nixos-unstable pin)
-              # segfaults in its test suite on aarch64-darwin.
-              python311 = prev.python311.override {
-                packageOverrides = pyfinal: pyprev: {
-                  weasyprint = pyprev.weasyprint.overridePythonAttrs (old: {
-                    doCheck = false;
-                  });
-                };
-              };
-            })
-          ];
         };
-        python = pkgs.python311.withPackages (ppkgs: with ppkgs; [
-          ansi2html
-          weasyprint
-        ]);
+        # Only the stdlib is needed now; code_to_pdf no longer uses weasyprint
+        # or ansi2html, which is what previously forced a python311 package-set
+        # override to skip a test suite that segfaults on darwin.
+        python = pkgs.python3;
 
         # Runtime dependencies that will be added to every wrapped script's PATH
         runtimePkgs = with pkgs; [
@@ -50,6 +33,7 @@
           gnugrep
           gnused
           bat
+          typst
           python
         ];
       in
