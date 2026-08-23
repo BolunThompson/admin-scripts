@@ -86,7 +86,9 @@ async def get_claude_usage(config_dir):
 
 
 get_personal_claude_usage = functools.partial(get_claude_usage, Path.home() / ".claude")
-get_work_claude_usage = functools.partial(get_claude_usage, Path.home() / ".claude-work")
+get_work_claude_usage = functools.partial(
+    get_claude_usage, Path.home() / ".claude-work"
+)
 
 
 async def get_codex_usage(config_dir):
@@ -183,9 +185,8 @@ async def get_codex_usage(config_dir):
     return result
 
 
-get_personal_codex_usage = functools.partial(
-    get_codex_usage, Path.home() / ".codex"
-)
+get_personal_codex_usage = functools.partial(get_codex_usage, Path.home() / ".codex")
+get_personal2_codex_usage = functools.partial(get_codex_usage, Path.home() / ".codex2")
 get_work_codex_usage = functools.partial(get_codex_usage, Path.home() / ".codex-work")
 
 
@@ -211,6 +212,7 @@ async def main():
         "claude": get_personal_claude_usage,
         "claude-work": get_work_claude_usage,
         "codex": get_personal_codex_usage,
+        "codex2": get_personal2_codex_usage,
         "codex-work": get_work_codex_usage,
     }
 
