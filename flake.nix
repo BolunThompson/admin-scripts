@@ -64,7 +64,7 @@
           packages = with pkgs; [
             shfmt
             shellcheck
-            nodePackages_latest.bash-language-server
+            bash-language-server
           ] ++ runtimePkgs;
         };
       });
