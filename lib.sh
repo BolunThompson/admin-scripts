@@ -118,6 +118,7 @@ is_online() {
 
 rebuild() {
 	local flake_path="${1:-$HOME/dotfiles}"
+	echo "WARNING: Update your system local configuration md to include any new items!"
 
 	if command -v nixos-rebuild >/dev/null 2>&1; then
 		as_root nixos-rebuild switch --flake "$flake_path"
